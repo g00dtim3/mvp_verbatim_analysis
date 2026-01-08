@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:15-alpine
+    container_name: verbatim_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: verbatim_user
+      POSTGRES_PASSWORD: verbatim_password_change_me
+      POSTGRES_DB: verbatim_analysis
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init_schema.sql:/docker-entrypoint-initdb.d/01_init_schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U verbatim_user -d verbatim_analysis"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # pgAdmin (optionnel - interface web pour PostgreSQL)
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: verbatim_pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@local.dev
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    depends_on:
+      - db
+    profiles:
+      - tools  # Ne démarre qu'avec: docker-compose --profile tools up
+
+volumes:
+  postgres_data:
+
+# Usage:
+# ------
+# Démarrer la DB uniquement:
+#   docker-compose up -d db
+#
+# Démarrer avec pgAdmin:
+#   docker-compose --profile tools up -d
+#
+# Voir les logs:
+#   docker-compose logs -f db
+#
+# Arrêter:
+#   docker-compose down
+#
+# Supprimer les données:
+#   docker-compose down -v
