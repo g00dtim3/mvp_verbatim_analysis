@@ -1,10 +1,13 @@
 """
-Gestion de la connexion à la base de données PostgreSQL.
+Gestion de la connexion à la base de données PostgreSQL / Supabase.
+Supporte:
+- PostgreSQL local (docker-compose)
+- Supabase (backend-as-a-service PostgreSQL)
 """
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, Session
-from sqlalchemy.pool import QueuePool
+from sqlalchemy.pool import QueuePool, NullPool
 from contextlib import contextmanager
 from typing import Generator
 from loguru import logger
@@ -12,16 +15,39 @@ from loguru import logger
 from src.utils.config import settings
 
 
-# Création du moteur SQLAlchemy
-engine = create_engine(
-    settings.database_url,
-    poolclass=QueuePool,
-    pool_size=5,
-    max_overflow=10,
-    pool_timeout=30,
-    pool_recycle=1800,
-    echo=settings.debug,
-)
+# Obtenir l'URL de connexion (local ou Supabase)
+database_url = settings.get_database_url()
+
+# Log du type de connexion
+if settings.use_supabase:
+    logger.info("🔵 Using Supabase as database backend")
+    logger.debug(f"Supabase URL: {settings.supabase_url}")
+else:
+    logger.info("🐘 Using local PostgreSQL")
+
+# Configuration du pool selon le backend
+if settings.use_supabase:
+    # Supabase: utiliser NullPool ou pool léger (connection pooler côté Supabase)
+    engine = create_engine(
+        database_url,
+        poolclass=NullPool,  # Supabase gère son propre pooling
+        echo=settings.debug,
+        connect_args={
+            "connect_timeout": 10,
+            "options": "-c timezone=utc"
+        }
+    )
+else:
+    # PostgreSQL local: pool classique
+    engine = create_engine(
+        database_url,
+        poolclass=QueuePool,
+        pool_size=5,
+        max_overflow=10,
+        pool_timeout=30,
+        pool_recycle=1800,
+        echo=settings.debug,
+    )
 
 # Factory de sessions
 SessionLocal = sessionmaker(

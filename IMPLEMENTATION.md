@@ -12,7 +12,7 @@ Ce document décrit l'implémentation complète du MVP Analyse Verbatims selon l
 
 ### Stack Technique
 - **Backend:** Python 3.11+
-- **Base de données:** PostgreSQL 15+
+- **Base de données:** PostgreSQL 15+ / Supabase
 - **Frontend:** Streamlit
 - **LLM:** OpenAI GPT-4 Turbo
 - **Orchestration:** LangGraph

@@ -8,7 +8,7 @@ Outil d'analyse quali/quanti de verbatims issus de Brandwatch et Semantiweb.
 |-----------|-------------|
 | Backend | Python 3.11+ |
 | Notebooks | Jupyter |
-| Base de données | PostgreSQL 15+ |
+| Base de données | PostgreSQL 15+ / Supabase |
 | Frontend | Streamlit |
 | Hosting | Posit Connect |
 | LLM | OpenAI GPT-4 |
@@ -98,13 +98,26 @@ nano .env
 
 ### 3. Base de données
 
-```bash
-# Option A : Docker (recommandé pour dev)
-docker-compose up -d db
+Trois options disponibles :
 
-# Option B : PostgreSQL local
+```bash
+# Option A : Docker PostgreSQL (recommandé pour dev local)
+docker-compose up -d db
+python scripts/init_db.py init
+python scripts/load_gida.py load
+
+# Option B : Supabase (recommandé pour production)
+# 1. Créer un projet sur https://supabase.com
+# 2. Configurer USE_SUPABASE=true dans .env
+# 3. Ajouter vos credentials Supabase
+# Voir SUPABASE_SETUP.md pour le guide complet
+python scripts/init_db.py init
+python scripts/load_gida.py load
+
+# Option C : PostgreSQL local
 # Créer la base manuellement puis :
-python scripts/init_db.py
+python scripts/init_db.py init
+python scripts/load_gida.py load
 ```
 
 ### 4. Lancer l'application

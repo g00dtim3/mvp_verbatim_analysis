@@ -17,7 +17,26 @@ class Settings(BaseSettings):
         default="postgresql://verbatim_user:verbatim_password@localhost:5432/verbatim_analysis",
         description="URL de connexion PostgreSQL"
     )
-    
+
+    # ----- Supabase (optionnel) -----
+    # Si ces valeurs sont fournies, elles remplacent database_url
+    supabase_url: Optional[str] = Field(
+        default=None,
+        description="URL du projet Supabase (ex: https://xxxxx.supabase.co)"
+    )
+    supabase_key: Optional[str] = Field(
+        default=None,
+        description="Clé API Supabase (anon/service key)"
+    )
+    supabase_db_url: Optional[str] = Field(
+        default=None,
+        description="URL de connexion directe à la DB Supabase (connection pooler)"
+    )
+    use_supabase: bool = Field(
+        default=False,
+        description="Utiliser Supabase au lieu de PostgreSQL local"
+    )
+
     # ----- OpenAI -----
     openai_api_key: str = Field(
         default="",
@@ -122,6 +141,24 @@ class Settings(BaseSettings):
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = False
+
+    def get_database_url(self) -> str:
+        """
+        Retourne l'URL de connexion à la base de données.
+        Priorité: Supabase DB URL > database_url local
+        """
+        if self.use_supabase and self.supabase_db_url:
+            return self.supabase_db_url
+        return self.database_url
+
+    def is_supabase_configured(self) -> bool:
+        """Vérifie si Supabase est correctement configuré."""
+        return (
+            self.use_supabase
+            and self.supabase_url is not None
+            and self.supabase_key is not None
+            and self.supabase_db_url is not None
+        )
 
 
 @lru_cache()
