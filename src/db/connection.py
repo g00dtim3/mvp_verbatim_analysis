@@ -18,6 +18,11 @@ from src.utils.config import settings
 # Obtenir l'URL de connexion (local ou Supabase)
 database_url = settings.get_database_url()
 
+# Convertir postgresql:// en postgresql+psycopg:// pour utiliser psycopg3
+if database_url.startswith("postgresql://"):
+    database_url = database_url.replace("postgresql://", "postgresql+psycopg://", 1)
+    logger.debug("Converted database URL to use psycopg3 driver")
+
 # Log du type de connexion
 if settings.use_supabase:
     logger.info("🔵 Using Supabase as database backend")
