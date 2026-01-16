@@ -5,8 +5,8 @@ pydantic-settings==2.7.0  # Updated to match pydantic 2.10.x
 
 # Database
 psycopg[binary]==3.3.2  # PostgreSQL adapter (Python 3.13 compatible)
-sqlalchemy==2.0.23
-alembic==1.13.0
+sqlalchemy==2.0.36  # Python 3.13 compatible
+alembic==1.14.0  # Updated for Python 3.13
 
 # Data Processing
 pandas==2.2.3  # Python 3.13 compatible
