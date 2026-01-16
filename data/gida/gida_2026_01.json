@@ -1,0 +1,172 @@
+{
+  "version": "2026.01",
+  "release_date": "2026-01-01",
+  "description": "Ontologie GIDA - Référentiel métier pour l'industrie pharmaceutique et santé",
+  "entities": [
+    {
+      "entity_type": "pathology",
+      "label": "Diabète",
+      "label_normalized": "diabete",
+      "keywords": ["diabète", "diabete", "glycémie", "insuline", "diabétique"],
+      "parent": null
+    },
+    {
+      "entity_type": "pathology",
+      "label": "Hypertension",
+      "label_normalized": "hypertension",
+      "keywords": ["hypertension", "tension artérielle", "pression artérielle", "hypertendu"],
+      "parent": null
+    },
+    {
+      "entity_type": "pathology",
+      "label": "Douleur",
+      "label_normalized": "douleur",
+      "keywords": ["douleur", "mal", "souffrance", "douloureux", "douloureuse"],
+      "parent": null
+    },
+    {
+      "entity_type": "pathology",
+      "label": "Arthrose",
+      "label_normalized": "arthrose",
+      "keywords": ["arthrose", "articulation", "arthrosique", "rhumatisme"],
+      "parent": null
+    },
+    {
+      "entity_type": "pathology",
+      "label": "Allergie",
+      "label_normalized": "allergie",
+      "keywords": ["allergie", "allergique", "réaction allergique", "hypersensibilité"],
+      "parent": null
+    },
+    {
+      "entity_type": "brand",
+      "label": "Doliprane",
+      "label_normalized": "doliprane",
+      "keywords": ["doliprane", "paracétamol doliprane"],
+      "parent": null
+    },
+    {
+      "entity_type": "brand",
+      "label": "Efferalgan",
+      "label_normalized": "efferalgan",
+      "keywords": ["efferalgan", "paracétamol efferalgan"],
+      "parent": null
+    },
+    {
+      "entity_type": "brand",
+      "label": "Advil",
+      "label_normalized": "advil",
+      "keywords": ["advil", "ibuprofène advil"],
+      "parent": null
+    },
+    {
+      "entity_type": "brand",
+      "label": "Spasfon",
+      "label_normalized": "spasfon",
+      "keywords": ["spasfon", "phloroglucinol"],
+      "parent": null
+    },
+    {
+      "entity_type": "brand",
+      "label": "Actifed",
+      "label_normalized": "actifed",
+      "keywords": ["actifed", "pseudoéphédrine"],
+      "parent": null
+    },
+    {
+      "entity_type": "zone",
+      "label": "Tête",
+      "label_normalized": "tete",
+      "keywords": ["tête", "tete", "crâne", "céphalée", "migraine"],
+      "parent": null
+    },
+    {
+      "entity_type": "zone",
+      "label": "Dos",
+      "label_normalized": "dos",
+      "keywords": ["dos", "colonne vertébrale", "lombaire", "dorsal"],
+      "parent": null
+    },
+    {
+      "entity_type": "zone",
+      "label": "Genou",
+      "label_normalized": "genou",
+      "keywords": ["genou", "genoux", "rotule"],
+      "parent": null
+    },
+    {
+      "entity_type": "zone",
+      "label": "Estomac",
+      "label_normalized": "estomac",
+      "keywords": ["estomac", "gastrique", "ventre", "abdomen"],
+      "parent": null
+    },
+    {
+      "entity_type": "zone",
+      "label": "Gorge",
+      "label_normalized": "gorge",
+      "keywords": ["gorge", "pharynx", "mal de gorge", "angine"],
+      "parent": null
+    },
+    {
+      "entity_type": "attribute",
+      "label": "Efficacité",
+      "label_normalized": "efficacite",
+      "keywords": ["efficace", "efficacité", "fonctionne", "marche bien", "résultat"],
+      "parent": null
+    },
+    {
+      "entity_type": "attribute",
+      "label": "Rapidité d'action",
+      "label_normalized": "rapidite_action",
+      "keywords": ["rapide", "rapidement", "vite", "immédiat", "en quelques minutes"],
+      "parent": null
+    },
+    {
+      "entity_type": "attribute",
+      "label": "Tolérance",
+      "label_normalized": "tolerance",
+      "keywords": ["bien toléré", "tolérance", "sans effet secondaire", "supporte bien"],
+      "parent": null
+    },
+    {
+      "entity_type": "attribute",
+      "label": "Prix",
+      "label_normalized": "prix",
+      "keywords": ["prix", "coût", "cher", "abordable", "économique", "bon marché"],
+      "parent": null
+    },
+    {
+      "entity_type": "attribute",
+      "label": "Disponibilité",
+      "label_normalized": "disponibilite",
+      "keywords": ["disponible", "disponibilité", "facile à trouver", "en stock", "rupture"],
+      "parent": null
+    },
+    {
+      "entity_type": "attribute",
+      "label": "Goût",
+      "label_normalized": "gout",
+      "keywords": ["goût", "gout", "saveur", "agréable", "désagréable", "amer"],
+      "parent": null
+    },
+    {
+      "entity_type": "attribute",
+      "label": "Présentation",
+      "label_normalized": "presentation",
+      "keywords": ["comprimé", "gélule", "sirop", "suppositoire", "injection", "pommade"],
+      "parent": null
+    }
+  ],
+  "metadata": {
+    "total_entities": 22,
+    "by_type": {
+      "pathology": 5,
+      "brand": 5,
+      "zone": 5,
+      "attribute": 7
+    },
+    "maintainer": "Département GIDA",
+    "last_review": "2026-01-01"
+  }
+}
