@@ -6,11 +6,11 @@ Outil d'analyse quali/quanti de verbatims issus de Brandwatch et Semantiweb.
 
 | Composant | Technologie |
 |-----------|-------------|
-| Backend | Python 3.11+ |
+| Backend | Python 3.13 |
 | Notebooks | Jupyter |
 | Base de données | PostgreSQL 15+ / Supabase |
 | Frontend | Streamlit |
-| Hosting | Posit Connect |
+| Hosting | Streamlit Cloud / Posit Connect |
 | LLM | OpenAI GPT-4 |
 | Orchestration | LangGraph |
 
@@ -67,8 +67,8 @@ mvp_verbatim_analysis/
 
 ### Prérequis
 
-- Python 3.11+
-- PostgreSQL 15+
+- Python 3.13
+- PostgreSQL 15+ (ou compte Supabase gratuit)
 - Compte OpenAI avec accès API
 
 ### 1. Cloner et configurer
@@ -171,12 +171,36 @@ pytest tests/ -v
 | `02_data_exploration.ipynb` | Exploration datasets test |
 | `03_prompt_tuning.ipynb` | Optimisation prompts LLM |
 
-## 🚢 Déploiement Posit
+## 🚢 Déploiement
+
+### Streamlit Cloud (Recommandé)
+
+1. Connecter le repo GitHub à Streamlit Cloud
+2. Configurer les secrets dans l'interface (Settings > Secrets):
+   ```toml
+   OPENAI_API_KEY = "sk-..."
+   SUPABASE_URL = "https://xxx.supabase.co"
+   SUPABASE_KEY = "eyJ..."
+   SUPABASE_DB_URL = "postgresql+psycopg://..."
+   USE_SUPABASE = "true"
+   ```
+3. Déployer automatiquement depuis la branche principale
+
+### Posit Connect
 
 ```bash
 # Publier sur Posit Connect
 rsconnect deploy streamlit app/ --name verbatim-analysis
 ```
+
+### Notes Python 3.13
+
+Le projet est entièrement compatible Python 3.13 avec:
+- ✅ SQLAlchemy 2.0.36+ (support Python 3.13)
+- ✅ psycopg3 (psycopg[binary] 3.3.2)
+- ✅ pandas 2.2.3+ (wheels precompilés)
+- ✅ pydantic 2.10.3+ (wheels precompilés)
+- ✅ tiktoken 0.8.0+ (wheels precompilés)
 
 ## 📄 License
 

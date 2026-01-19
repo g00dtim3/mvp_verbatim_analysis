@@ -11,12 +11,13 @@ Ce document décrit l'implémentation complète du MVP Analyse Verbatims selon l
 ## 🏗️ Architecture Implémentée
 
 ### Stack Technique
-- **Backend:** Python 3.11+
+- **Backend:** Python 3.13
 - **Base de données:** PostgreSQL 15+ / Supabase
 - **Frontend:** Streamlit
 - **LLM:** OpenAI GPT-4 Turbo
 - **Orchestration:** LangGraph
-- **Hosting cible:** Posit Connect
+- **Hosting:** Streamlit Cloud / Posit Connect
+- **Driver PostgreSQL:** psycopg3 (psycopg[binary] 3.3.2)
 
 ### Structure du Projet
 
@@ -202,15 +203,20 @@ CreateChunks → AnalyzeChunks → MergeTopics → GenerateOntology → Quantify
 ### 1. Prérequis
 
 ```bash
-# Python 3.11+
+# Python 3.13
 python --version
 
-# PostgreSQL 15+
+# PostgreSQL 15+ (ou compte Supabase gratuit)
 psql --version
 
 # OpenAI API key
 export OPENAI_API_KEY="sk-..."
 ```
+
+**Important:** Python 3.13 est requis. Le projet utilise les dernières versions compatibles:
+- SQLAlchemy 2.0.36+ (support Python 3.13 ajouté en 2.0.35)
+- psycopg3 via `psycopg[binary]==3.3.2` (conversion automatique `postgresql://` → `postgresql+psycopg://`)
+- Tous les packages ont des wheels precompilés pour Python 3.13
 
 ### 2. Installation
 
@@ -418,6 +424,52 @@ Processus de mise à jour:
 3. Mettre à jour `GIDA_VERSION` et `GIDA_PATH` dans `.env`
 4. Exécuter: `python scripts/load_gida.py load --file data/gida/gida_2026_02.json`
 5. Vérifier: `python scripts/load_gida.py stats`
+
+## 🚀 Déploiement Streamlit Cloud
+
+### Configuration Secrets
+
+Dans l'interface Streamlit Cloud (Settings > Secrets), ajouter:
+
+```toml
+# OpenAI
+OPENAI_API_KEY = "sk-..."
+OPENAI_MODEL = "gpt-4-turbo-preview"
+
+# Supabase
+SUPABASE_URL = "https://xxxxx.supabase.co"
+SUPABASE_KEY = "eyJhbGc..."
+SUPABASE_DB_URL = "postgresql+psycopg://postgres.xxxxx:password@aws-0-eu-central-1.pooler.supabase.com:6543/postgres"
+USE_SUPABASE = "true"
+
+# Application
+DEBUG = "false"
+LOG_LEVEL = "INFO"
+```
+
+### Points d'Attention
+
+1. **URL PostgreSQL**: Doit commencer par `postgresql+psycopg://` (pas `postgresql://`) pour utiliser psycopg3
+2. **Supabase Pooler**: Utiliser l'URL du connection pooler (port 6543, mode Transaction)
+3. **Python 3.13**: Streamlit Cloud utilise Python 3.13 - toutes les dépendances sont compatibles
+4. **SQL Setup**: Exécuter les scripts SQL dans Supabase SQL Editor:
+   - `sql/create_tables.sql` (création des tables)
+   - `sql/insert_gida_data.sql` (données de référence GIDA)
+
+### Dépendances Python 3.13
+
+Toutes les dépendances ont été mises à jour pour Python 3.13:
+
+| Package | Version | Note |
+|---------|---------|------|
+| sqlalchemy | 2.0.36 | Support Python 3.13 (>= 2.0.35) |
+| psycopg[binary] | 3.3.2 | psycopg3 avec wheels precompilés |
+| pandas | 2.2.3 | Wheels Python 3.13 disponibles |
+| pydantic | 2.10.3 | Wheels Python 3.13 disponibles |
+| tiktoken | 0.8.0 | Wheels Python 3.13 disponibles |
+| streamlit | 1.40.0 | Compatible Python 3.13 |
+| langchain | 0.3.14 | Mis à jour pour Python 3.13 |
+| langgraph | 0.2.59 | Mis à jour pour Python 3.13 |
 
 ## ✨ Résumé
 
