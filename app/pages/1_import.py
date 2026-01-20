@@ -29,6 +29,8 @@ if "detected_source" not in st.session_state:
     st.session_state.detected_source = None
 if "column_mapping" not in st.session_state:
     st.session_state.column_mapping = {}
+if "uploaded_filename" not in st.session_state:
+    st.session_state.uploaded_filename = None
 
 
 def detect_source_type(columns: list) -> str:
@@ -82,19 +84,20 @@ if uploaded_file:
     try:
         df = pd.read_csv(uploaded_file, nrows=1000)  # Preview limité
         st.session_state.uploaded_df = df
-        
+        st.session_state.uploaded_filename = uploaded_file.name
+
         # Détecter le type
         source_type = detect_source_type(df.columns.tolist())
         st.session_state.detected_source = source_type
-        
+
         # Auto-mapping
         st.session_state.column_mapping = get_auto_mapping(
-            df.columns.tolist(), 
+            df.columns.tolist(),
             source_type
         )
-        
+
         st.success(f"✅ Fichier chargé: {len(df)} lignes (preview), {len(df.columns)} colonnes")
-        
+
     except Exception as e:
         st.error(f"❌ Erreur de chargement: {e}")
 
@@ -177,9 +180,13 @@ if st.session_state.uploaded_df is not None:
                 st.write(f"**{target}** ← {source}")
         
         # Nom du projet
+        default_name = ""
+        if st.session_state.uploaded_filename:
+            default_name = st.session_state.uploaded_filename.replace(".csv", "")
+
         project_name = st.text_input(
             "Nom du projet",
-            value=uploaded_file.name.replace(".csv", ""),
+            value=default_name,
             help="Nom pour identifier ce dataset"
         )
         
