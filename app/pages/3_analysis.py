@@ -232,11 +232,10 @@ else:
                         df = pd.DataFrame({'full_text': all_verbatims})
                         df_sample, sample_info = stratified_sample(
                             df,
-                            n_samples=min(750, len(all_verbatims)),
-                            text_col='full_text'
+                            n_samples=min(750, len(all_verbatims))
                         )
                         verbatims_to_analyze = df_sample['full_text'].tolist()
-                        st.info(f"📊 Mode rapide: {len(verbatims_to_analyze)} verbatims sélectionnés")
+                        st.info(f"📊 Mode rapide: {len(verbatims_to_analyze)} verbatims sélectionnés ({sample_info.get('strategy', 'stratified')})")
                     else:
                         verbatims_to_analyze = all_verbatims
                         st.info(f"📊 Mode complet: {len(verbatims_to_analyze)} verbatims")
