@@ -20,6 +20,8 @@ st.set_page_config(page_title="Exploration & Export", page_icon="📊", layout="
 
 st.title("📊 Exploration & Export")
 
+# Force redeploy - 2026-01-22
+
 # Session state
 if "current_run_id" not in st.session_state:
     st.session_state.current_run_id = None
