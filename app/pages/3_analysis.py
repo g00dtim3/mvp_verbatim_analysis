@@ -291,8 +291,12 @@ else:
                     ontology = item.get('ontology', {})
                     metrics = item.get('metrics', {})
 
+                    # Générer l'UUID du topic manuellement pour éviter problème de flush
+                    topic_id = uuid.uuid4()
+
                     # Créer le RunTopic avec les métriques de quantification
                     run_topic = RunTopic(
+                        id=topic_id,
                         run_id=run_id,
                         canonical_label=topic.get('canonical_label', 'Unknown'),
                         aliases=topic.get('aliases', []),
@@ -305,12 +309,11 @@ else:
                         source_chunk_topic_ids=topic.get('source_chunk_topic_ids', [])
                     )
                     db.add(run_topic)
-                    # L'ID est disponible immédiatement (UUID généré par défaut)
 
                     # Créer le ProjectOntology pour ce topic
                     project_ontology = ProjectOntology(
                         run_id=run_id,
-                        topic_id=run_topic.id,
+                        topic_id=topic_id,
                         keywords=ontology.get('keywords', []),
                         regex_patterns=ontology.get('regex_patterns', []),
                         negative_keywords=ontology.get('negative_keywords', []),
