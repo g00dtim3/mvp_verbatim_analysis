@@ -13,25 +13,93 @@ sys.path.insert(0, str(project_root))
 from src.api.cleaning import get_default_cleaning_options, get_cleaning_examples, clean_verbatims
 from src.api.deduplication import get_duplicate_examples
 from src.utils.config import CLEANING_OPTIONS
+from src.db.connection import get_db
+from src.db.models import Project, ProjectVerbatim
+from sqlalchemy import func, desc
 
 st.set_page_config(page_title="Nettoyage & Déduplication", page_icon="🧹", layout="wide")
 
 st.title("🧹 Nettoyage & Déduplication")
 
 # Session state
-if "project_data" not in st.session_state:
-    st.session_state.project_data = None
+if "current_project_id" not in st.session_state:
+    st.session_state.current_project_id = None
+if "current_project_name" not in st.session_state:
+    st.session_state.current_project_name = None
 if "clean_options" not in st.session_state:
     st.session_state.clean_options = get_default_cleaning_options()
 if "dedup_threshold" not in st.session_state:
     st.session_state.dedup_threshold = 0.90
 
-# Mock data pour démo (TODO: charger depuis DB)
-if st.session_state.project_data is None:
-    st.warning("⚠️ Aucun projet chargé. Retournez à l'étape d'import.")
+# Sélection du projet
+st.header("📁 Sélection du projet")
+
+try:
+    with get_db() as db:
+        # Charger tous les projets
+        projects = db.query(
+            Project.id,
+            Project.name,
+            Project.source_type,
+            Project.created_at,
+            func.count(ProjectVerbatim.id).label('verbatim_count')
+        ).outerjoin(
+            ProjectVerbatim, Project.id == ProjectVerbatim.project_id
+        ).group_by(
+            Project.id
+        ).order_by(
+            desc(Project.created_at)
+        ).all()
+
+        if not projects:
+            st.warning("⚠️ Aucun projet trouvé. Commencez par importer un dataset.")
+            if st.button("← Aller à l'import"):
+                st.switch_page("pages/1_import.py")
+            st.stop()
+
+        # Options pour le selectbox
+        project_options = {
+            str(p.id): f"{p.name} ({p.verbatim_count:,} verbatims - {p.created_at.strftime('%Y-%m-%d')})"
+            for p in projects
+        }
+
+        # Sélecteur
+        selected_project_id = st.selectbox(
+            "Choisir un projet",
+            options=list(project_options.keys()),
+            format_func=lambda x: project_options[x],
+            index=list(project_options.keys()).index(st.session_state.current_project_id)
+            if st.session_state.current_project_id in project_options
+            else 0,
+            key="project_selector"
+        )
+
+        # Mettre à jour la session
+        if selected_project_id != st.session_state.current_project_id:
+            st.session_state.current_project_id = selected_project_id
+            st.session_state.current_project_name = next(
+                p.name for p in projects if str(p.id) == selected_project_id
+            )
+            st.rerun()
+
+        # Afficher les infos du projet sélectionné
+        selected_project = next(p for p in projects if str(p.id) == selected_project_id)
+
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Verbatims", f"{selected_project.verbatim_count:,}")
+        with col2:
+            st.metric("Source", selected_project.source_type)
+        with col3:
+            st.metric("Date import", selected_project.created_at.strftime('%Y-%m-%d'))
+
+except Exception as e:
+    st.error(f"Erreur lors du chargement des projets: {str(e)}")
     if st.button("← Retour à l'import"):
         st.switch_page("pages/1_import.py")
     st.stop()
+
+st.divider()
 
 # Options de nettoyage
 st.header("1️⃣ Options de nettoyage")
