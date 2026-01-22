@@ -5,22 +5,103 @@ Page d'analyse thématique LLM.
 import streamlit as st
 from pathlib import Path
 import sys
+import uuid
+from datetime import datetime
 
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 from src.api.analysis_llm import estimate_analysis_cost, check_cost_alerts
+from src.api.sampling import stratified_sample
 from src.utils.config import settings
+from src.db.connection import get_db
+from src.db.models import Project, ProjectVerbatim, AnalysisRun
+from src.llm.langgraph_pipeline import VerbatimAnalysisPipeline
+from sqlalchemy import func, desc
+import pandas as pd
 
 st.set_page_config(page_title="Analyse Thématique", page_icon="🔍", layout="wide")
 
 st.title("🔍 Analyse Thématique par LLM")
 
 # Session state
+if "current_project_id" not in st.session_state:
+    st.session_state.current_project_id = None
+if "current_project_name" not in st.session_state:
+    st.session_state.current_project_name = None
 if "brief" not in st.session_state:
     st.session_state.brief = ""
 if "analysis_mode" not in st.session_state:
     st.session_state.analysis_mode = "rapid"
+
+# Sélection du projet
+st.header("📁 Sélection du projet")
+
+try:
+    with get_db() as db:
+        # Charger tous les projets
+        projects = db.query(
+            Project.id,
+            Project.name,
+            Project.source_type,
+            Project.created_at,
+            func.count(ProjectVerbatim.id).label('verbatim_count')
+        ).outerjoin(
+            ProjectVerbatim, Project.id == ProjectVerbatim.project_id
+        ).group_by(
+            Project.id
+        ).order_by(
+            desc(Project.created_at)
+        ).all()
+
+        if not projects:
+            st.warning("⚠️ Aucun projet trouvé. Commencez par importer un dataset.")
+            if st.button("← Aller à l'import"):
+                st.switch_page("pages/1_import.py")
+            st.stop()
+
+        # Options pour le selectbox
+        project_options = {
+            str(p.id): f"{p.name} ({p.verbatim_count:,} verbatims - {p.created_at.strftime('%Y-%m-%d')})"
+            for p in projects
+        }
+
+        # Sélecteur
+        selected_project_id = st.selectbox(
+            "Choisir un projet à analyser",
+            options=list(project_options.keys()),
+            format_func=lambda x: project_options[x],
+            index=list(project_options.keys()).index(st.session_state.current_project_id)
+            if st.session_state.current_project_id in project_options
+            else 0,
+            key="project_selector_analysis"
+        )
+
+        # Mettre à jour la session
+        if selected_project_id != st.session_state.current_project_id:
+            st.session_state.current_project_id = selected_project_id
+            st.session_state.current_project_name = next(
+                p.name for p in projects if str(p.id) == selected_project_id
+            )
+
+        # Afficher les infos du projet sélectionné
+        selected_project = next(p for p in projects if str(p.id) == selected_project_id)
+
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Verbatims", f"{selected_project.verbatim_count:,}")
+        with col2:
+            st.metric("Source", selected_project.source_type)
+        with col3:
+            st.metric("Date import", selected_project.created_at.strftime('%Y-%m-%d'))
+
+except Exception as e:
+    st.error(f"Erreur lors du chargement des projets: {str(e)}")
+    if st.button("← Retour à l'accueil"):
+        st.switch_page("app.py")
+    st.stop()
+
+st.divider()
 
 # Brief contexte
 st.header("1️⃣ Contexte de l'analyse")
@@ -77,44 +158,53 @@ with col2:
 # Estimation du coût
 st.header("3️⃣ Estimation")
 
-# Mock data (TODO: charger depuis DB)
-mock_verbatims = ["verbatim " + str(i) for i in range(5000)]
-
 if st.button("📊 Calculer l'estimation"):
     with st.spinner("Calcul en cours..."):
-        if st.session_state.analysis_mode == "rapid":
-            # Échantillon de 750
-            sample = mock_verbatims[:750]
-        else:
-            sample = mock_verbatims
+        try:
+            with get_db() as db:
+                # Charger les verbatims depuis la DB
+                verbatims_query = db.query(ProjectVerbatim.full_text).filter(
+                    ProjectVerbatim.project_id == uuid.UUID(st.session_state.current_project_id)
+                ).all()
 
-        estimate = estimate_analysis_cost(
-            verbatims=sample,
-            brief=st.session_state.brief or "Analyse générale"
-        )
+                all_verbatims = [v.full_text for v in verbatims_query if v.full_text]
 
-        # Vérifier les alertes
-        alert = check_cost_alerts(estimate['nb_chunks'])
+                if st.session_state.analysis_mode == "rapid":
+                    # Échantillon de 750
+                    sample = all_verbatims[:min(750, len(all_verbatims))]
+                else:
+                    sample = all_verbatims
 
-        col1, col2, col3, col4 = st.columns(4)
+                estimate = estimate_analysis_cost(
+                    verbatims=sample,
+                    brief=st.session_state.brief or "Analyse générale"
+                )
 
-        with col1:
-            st.metric("Verbatims", f"{estimate['nb_verbatims']:,}")
-        with col2:
-            st.metric("Chunks", estimate['nb_chunks'])
-        with col3:
-            st.metric("Coût estimé", f"${estimate['estimated_cost_usd']:.2f}")
-        with col4:
-            mins = estimate['estimated_time_seconds'] // 60
-            st.metric("Durée estimée", f"~{mins} min")
+                # Vérifier les alertes
+                alert = check_cost_alerts(estimate['nb_chunks'])
 
-        # Alerte
-        if alert['alert_level'] == 'blocking':
-            st.error(alert['message'])
-        elif alert['alert_level'] == 'warning':
-            st.warning(alert['message'])
-        else:
-            st.success(alert['message'])
+                col1, col2, col3, col4 = st.columns(4)
+
+                with col1:
+                    st.metric("Verbatims", f"{estimate['nb_verbatims']:,}")
+                with col2:
+                    st.metric("Chunks", estimate['nb_chunks'])
+                with col3:
+                    st.metric("Coût estimé", f"${estimate['estimated_cost_usd']:.2f}")
+                with col4:
+                    mins = estimate['estimated_time_seconds'] // 60
+                    st.metric("Durée estimée", f"~{mins} min")
+
+                # Alerte
+                if alert['alert_level'] == 'blocking':
+                    st.error(alert['message'])
+                elif alert['alert_level'] == 'warning':
+                    st.warning(alert['message'])
+                else:
+                    st.success(alert['message'])
+
+        except Exception as e:
+            st.error(f"Erreur lors du calcul: {str(e)}")
 
 # Lancer l'analyse
 st.header("4️⃣ Lancer l'analyse")
@@ -123,36 +213,112 @@ if not st.session_state.brief:
     st.warning("⚠️ Veuillez fournir un contexte d'analyse (brief)")
 else:
     if st.button("🚀 Lancer l'analyse LLM", type="primary", use_container_width=True):
-        with st.spinner("Analyse en cours... Cela peut prendre plusieurs minutes"):
-            # TODO: Implémenter le pipeline LangGraph
-            import time
+        try:
+            with st.spinner("Chargement des verbatims..."):
+                with get_db() as db:
+                    # Charger les verbatims
+                    verbatims_query = db.query(ProjectVerbatim.full_text).filter(
+                        ProjectVerbatim.project_id == uuid.UUID(st.session_state.current_project_id)
+                    ).all()
 
+                    all_verbatims = [v.full_text for v in verbatims_query if v.full_text]
+
+                    if not all_verbatims:
+                        st.error("Aucun verbatim trouvé dans ce projet")
+                        st.stop()
+
+                    # Appliquer sampling si mode rapide
+                    if st.session_state.analysis_mode == "rapid":
+                        df = pd.DataFrame({'full_text': all_verbatims})
+                        df_sample, sample_info = stratified_sample(
+                            df,
+                            n_samples=min(750, len(all_verbatims)),
+                            text_col='full_text'
+                        )
+                        verbatims_to_analyze = df_sample['full_text'].tolist()
+                        st.info(f"📊 Mode rapide: {len(verbatims_to_analyze)} verbatims sélectionnés")
+                    else:
+                        verbatims_to_analyze = all_verbatims
+                        st.info(f"📊 Mode complet: {len(verbatims_to_analyze)} verbatims")
+
+            # Créer l'AnalysisRun dans la DB
+            with st.spinner("Initialisation de l'analyse..."):
+                with get_db() as db:
+                    analysis_run = AnalysisRun(
+                        project_id=uuid.UUID(st.session_state.current_project_id),
+                        mode=st.session_state.analysis_mode,
+                        brief=st.session_state.brief,
+                        status='processing',
+                        gida_version=settings.gida_version,
+                        started_at=datetime.now()
+                    )
+                    db.add(analysis_run)
+                    db.commit()
+                    db.refresh(analysis_run)
+                    run_id = analysis_run.id
+
+            # Lancer le pipeline
             progress_bar = st.progress(0)
             status_text = st.empty()
 
-            steps = [
-                ("Création des chunks", 20),
-                ("Analyse LLM par chunk", 60),
-                ("Fusion des thèmes", 80),
-                ("Génération de l'ontologie", 90),
-                ("Quantification", 100)
-            ]
+            status_text.text("⏳ Initialisation du pipeline LangGraph...")
+            pipeline = VerbatimAnalysisPipeline()
+            progress_bar.progress(10)
 
-            for step_name, progress in steps:
-                status_text.text(f"⏳ {step_name}...")
-                time.sleep(1)
-                progress_bar.progress(progress)
+            status_text.text("⏳ Analyse en cours... (cela peut prendre quelques minutes)")
+            result = pipeline.run(
+                verbatims=verbatims_to_analyze,
+                brief=st.session_state.brief,
+                mode=st.session_state.analysis_mode
+            )
+            progress_bar.progress(90)
 
-            st.success("✅ Analyse terminée avec succès!")
+            # Mettre à jour l'AnalysisRun
+            status_text.text("⏳ Sauvegarde des résultats...")
+            with get_db() as db:
+                run = db.query(AnalysisRun).filter(AnalysisRun.id == run_id).first()
+                run.status = result['status']
+                run.completed_at = datetime.now()
+                run.total_verbatims = len(verbatims_to_analyze)
+                run.total_chunks = result.get('stats', {}).get('total_chunks', 0)
+                run.total_themes = len(result.get('topics_quantified', []))
+                db.commit()
+
+            progress_bar.progress(100)
+            status_text.text("✅ Analyse terminée!")
+
+            st.success(f"✅ Analyse terminée avec succès!")
             st.balloons()
 
             # Résumé
-            st.info("""
-            **Résultats:**
-            - 25 thèmes identifiés
-            - 3 chunks traités
-            - Coût: $1.45
-            """)
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Thèmes identifiés", len(result.get('topics_quantified', [])))
+            with col2:
+                st.metric("Chunks traités", result.get('stats', {}).get('chunks_success', 0))
+            with col3:
+                st.metric("Verbatims analysés", len(verbatims_to_analyze))
+
+            # Stocker l'ID du run dans la session
+            st.session_state.current_run_id = str(run_id)
 
             if st.button("➡️ Voir les résultats"):
                 st.switch_page("pages/5_exploration.py")
+
+        except Exception as e:
+            st.error(f"❌ Erreur lors de l'analyse: {str(e)}")
+            import traceback
+            with st.expander("Détails de l'erreur"):
+                st.code(traceback.format_exc())
+
+            # Marquer le run comme failed
+            try:
+                with get_db() as db:
+                    if 'run_id' in locals():
+                        run = db.query(AnalysisRun).filter(AnalysisRun.id == run_id).first()
+                        if run:
+                            run.status = 'failed'
+                            run.completed_at = datetime.now()
+                            db.commit()
+            except:
+                pass
