@@ -94,14 +94,27 @@ try:
 
         st.divider()
 
-        # Charger les thèmes de ce run
-        topics = db.query(RunTopic).filter(
+        # Charger les thèmes de ce run et convertir en dictionnaires
+        topics_raw = db.query(RunTopic).filter(
             RunTopic.run_id == uuid.UUID(selected_run_id)
         ).all()
 
-        if not topics:
+        if not topics_raw:
             st.warning("Aucun thème trouvé pour cette analyse.")
             st.stop()
+
+        # Convertir en liste de dictionnaires pour éviter DetachedInstanceError
+        topics = []
+        for t in topics_raw:
+            topics.append({
+                'id': t.id,
+                'canonical_label': t.canonical_label,
+                'pain_points': t.pain_points or [],
+                'benefits': t.benefits or [],
+                'volume_verbatims': t.volume_verbatims,
+                'volume_mentions': t.volume_mentions,
+                'pct_of_dataset': t.pct_of_dataset
+            })
 
 except Exception as e:
     st.error(f"Erreur lors du chargement des analyses: {str(e)}")
@@ -117,8 +130,8 @@ st.header("📊 Synthèse des thèmes")
 topics_data = []
 for topic in topics:
     # Déterminer le type en fonction de pain_points et benefits
-    has_pains = topic.pain_points and len(topic.pain_points) > 0
-    has_benefits = topic.benefits and len(topic.benefits) > 0
+    has_pains = topic['pain_points'] and len(topic['pain_points']) > 0
+    has_benefits = topic['benefits'] and len(topic['benefits']) > 0
 
     if has_pains and has_benefits:
         type_label = '😢😊 Mixte'
@@ -130,11 +143,11 @@ for topic in topics:
         type_label = '⚪ Neutre'
 
     topics_data.append({
-        'Thème': topic.canonical_label,
+        'Thème': topic['canonical_label'],
         'Type': type_label,
-        'Volume': topic.volume_verbatims,
-        '% Dataset': f"{topic.pct_of_dataset:.1f}%",
-        'Mentions': topic.volume_mentions
+        'Volume': topic['volume_verbatims'],
+        '% Dataset': f"{topic['pct_of_dataset']:.1f}%",
+        'Mentions': topic['volume_mentions']
     })
 
 df_topics = pd.DataFrame(topics_data)
@@ -156,15 +169,15 @@ with col1:
     st.metric("Total thèmes", len(topics))
 
 with col2:
-    pain_count = sum(1 for t in topics if t.pain_points and len(t.pain_points) > 0)
+    pain_count = sum(1 for t in topics if t['pain_points'] and len(t['pain_points']) > 0)
     st.metric("Topics avec pains", pain_count)
 
 with col3:
-    benefit_count = sum(1 for t in topics if t.benefits and len(t.benefits) > 0)
+    benefit_count = sum(1 for t in topics if t['benefits'] and len(t['benefits']) > 0)
     st.metric("Topics avec bénéfices", benefit_count)
 
 with col4:
-    total_volume = sum(t.volume_verbatims for t in topics)
+    total_volume = sum(t['volume_verbatims'] for t in topics)
     coverage = (total_volume / selected_run.total_verbatims * 100) if selected_run.total_verbatims > 0 else 0
     st.metric("Couverture", f"{coverage:.1f}%")
 
@@ -175,36 +188,51 @@ st.header("🔍 Ontologies générées")
 st.markdown("Keywords et patterns générés par le LLM pour chaque thème:")
 
 with get_db() as db:
-    # Charger les ontologies
-    ontologies = db.query(ProjectOntology).filter(
+    # Charger les ontologies avec les labels des topics
+    ontologies_raw = db.query(
+        ProjectOntology,
+        RunTopic.canonical_label
+    ).join(
+        RunTopic, ProjectOntology.topic_id == RunTopic.id
+    ).filter(
         ProjectOntology.run_id == uuid.UUID(selected_run_id)
     ).all()
 
-    for onto in ontologies:
-        with st.expander(f"**{onto.label}**", expanded=False):
-            col1, col2 = st.columns(2)
+    # Convertir en liste de dictionnaires
+    ontologies = []
+    for onto, label in ontologies_raw:
+        ontologies.append({
+            'label': label,
+            'keywords': onto.keywords or [],
+            'regex_patterns': onto.regex_patterns or [],
+            'negative_keywords': onto.negative_keywords or []
+        })
 
-            with col1:
-                st.markdown("**Keywords positifs:**")
-                if onto.keywords:
-                    for kw in onto.keywords[:10]:  # Afficher max 10
-                        st.markdown(f"- `{kw}`")
-                    if len(onto.keywords) > 10:
-                        st.caption(f"... et {len(onto.keywords) - 10} autres")
-                else:
-                    st.caption("Aucun")
+for onto in ontologies:
+    with st.expander(f"**{onto['label']}**", expanded=False):
+        col1, col2 = st.columns(2)
 
-            with col2:
-                st.markdown("**Patterns regex:**")
-                if onto.regex_patterns:
-                    for pattern in onto.regex_patterns[:5]:
-                        st.code(pattern, language="regex")
-                else:
-                    st.caption("Aucun")
+        with col1:
+            st.markdown("**Keywords positifs:**")
+            if onto['keywords']:
+                for kw in onto['keywords'][:10]:  # Afficher max 10
+                    st.markdown(f"- `{kw}`")
+                if len(onto['keywords']) > 10:
+                    st.caption(f"... et {len(onto['keywords']) - 10} autres")
+            else:
+                st.caption("Aucun")
 
-            if onto.negative_keywords:
-                st.markdown("**Keywords négatifs:**")
-                st.caption(", ".join(onto.negative_keywords[:10]))
+        with col2:
+            st.markdown("**Patterns regex:**")
+            if onto['regex_patterns']:
+                for pattern in onto['regex_patterns'][:5]:
+                    st.code(pattern, language="regex")
+            else:
+                st.caption("Aucun")
+
+        if onto['negative_keywords']:
+            st.markdown("**Keywords négatifs:**")
+            st.caption(", ".join(onto['negative_keywords'][:10]))
 
 # Export
 st.divider()
