@@ -6,16 +6,20 @@ import streamlit as st
 import pandas as pd
 from pathlib import Path
 import sys
+import uuid
+from datetime import datetime
 
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 from src.utils.config import (
-    settings, 
-    BRANDWATCH_COLUMN_MAPPING, 
+    settings,
+    BRANDWATCH_COLUMN_MAPPING,
     SEMANTIWEB_COLUMN_MAPPING,
     CLEANING_OPTIONS
 )
+from src.db.connection import get_db
+from src.db.models import Project, ProjectVerbatim
 
 st.set_page_config(page_title="Import Dataset", page_icon="📁", layout="wide")
 
@@ -25,12 +29,18 @@ st.markdown("Chargez votre fichier CSV Brandwatch ou Semantiweb")
 # État de session
 if "uploaded_df" not in st.session_state:
     st.session_state.uploaded_df = None
+if "uploaded_df_full" not in st.session_state:
+    st.session_state.uploaded_df_full = None
 if "detected_source" not in st.session_state:
     st.session_state.detected_source = None
 if "column_mapping" not in st.session_state:
     st.session_state.column_mapping = {}
 if "uploaded_filename" not in st.session_state:
     st.session_state.uploaded_filename = None
+if "current_project_id" not in st.session_state:
+    st.session_state.current_project_id = None
+if "current_project_name" not in st.session_state:
+    st.session_state.current_project_name = None
 
 
 def detect_source_type(columns: list) -> str:
@@ -82,21 +92,27 @@ uploaded_file = st.file_uploader(
 if uploaded_file:
     # Charger le fichier
     try:
-        df = pd.read_csv(uploaded_file, nrows=1000)  # Preview limité
-        st.session_state.uploaded_df = df
+        # Charger tout le fichier pour l'import
+        df_full = pd.read_csv(uploaded_file)
+        st.session_state.uploaded_df_full = df_full
+
+        # Charger preview limité pour l'affichage
+        uploaded_file.seek(0)  # Revenir au début du fichier
+        df_preview = pd.read_csv(uploaded_file, nrows=1000)
+        st.session_state.uploaded_df = df_preview
         st.session_state.uploaded_filename = uploaded_file.name
 
-        # Détecter le type
-        source_type = detect_source_type(df.columns.tolist())
+        # Détecter le type (sur le preview)
+        source_type = detect_source_type(df_preview.columns.tolist())
         st.session_state.detected_source = source_type
 
         # Auto-mapping
         st.session_state.column_mapping = get_auto_mapping(
-            df.columns.tolist(),
+            df_preview.columns.tolist(),
             source_type
         )
 
-        st.success(f"✅ Fichier chargé: {len(df)} lignes (preview), {len(df.columns)} colonnes")
+        st.success(f"✅ Fichier chargé: {len(df_full):,} lignes totales, {len(df_preview.columns)} colonnes (preview: {len(df_preview)} lignes)")
 
     except Exception as e:
         st.error(f"❌ Erreur de chargement: {e}")
@@ -109,7 +125,8 @@ if st.session_state.uploaded_df is not None:
     
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.metric("Lignes (preview)", f"{len(df):,}")
+        total_rows = len(st.session_state.uploaded_df_full) if st.session_state.uploaded_df_full is not None else len(df)
+        st.metric("Lignes totales", f"{total_rows:,}")
     with col2:
         st.metric("Colonnes", len(df.columns))
     with col3:
@@ -192,17 +209,90 @@ if st.session_state.uploaded_df is not None:
         
         # Bouton d'import
         if st.button("🚀 Importer le dataset", type="primary", use_container_width=True):
-            with st.spinner("Import en cours..."):
-                # TODO: Implémenter l'import réel en DB
-                
-                # Simulation
-                import time
-                time.sleep(2)
-                
-                st.success(f"✅ Dataset '{project_name}' importé avec succès!")
-                st.balloons()
-                
-                # Redirection
-                st.info("➡️ Passez à l'étape de nettoyage")
-                if st.button("Continuer vers le nettoyage"):
-                    st.switch_page("pages/2_cleaning.py")
+            if not project_name or project_name.strip() == "":
+                st.error("❌ Le nom du projet est obligatoire")
+            else:
+                with st.spinner("Import en cours..."):
+                    try:
+                        # Utiliser le DataFrame complet (pas juste le preview)
+                        df_to_import = st.session_state.uploaded_df_full
+                        if df_to_import is None:
+                            st.error("❌ Erreur: fichier non chargé")
+                            st.stop()
+
+                        # Appliquer le mapping aux colonnes
+                        mapping_dict = {}
+                        for target_field, _, _ in target_fields:
+                            source_col = mapping.get(target_field)
+                            if source_col and source_col != "(Non mappé)":
+                                mapping_dict[source_col] = target_field
+
+                        # Renommer les colonnes selon le mapping
+                        df_mapped = df_to_import.rename(columns=mapping_dict)
+
+                        # Parser les dates si présentes
+                        if 'source_date' in df_mapped.columns:
+                            df_mapped['source_date'] = pd.to_datetime(
+                                df_mapped['source_date'],
+                                errors='coerce'
+                            )
+
+                        # Créer le projet en DB
+                        with get_db() as db:
+                            project = Project(
+                                name=project_name.strip(),
+                                description=f"Import depuis {st.session_state.uploaded_filename}",
+                                source_type=st.session_state.detected_source,
+                                metadata_={
+                                    'original_filename': st.session_state.uploaded_filename,
+                                    'original_rows': len(df_mapped),
+                                    'original_columns': list(df_to_import.columns.tolist()),
+                                    'column_mapping': mapping_dict,
+                                    'imported_at': datetime.now().isoformat()
+                                }
+                            )
+                            db.add(project)
+                            db.flush()
+
+                            # Insérer les verbatims
+                            verbatims = []
+                            for idx, row in df_mapped.iterrows():
+                                verbatim = ProjectVerbatim(
+                                    project_id=project.id,
+                                    full_text=str(row.get('full_text', '')),
+                                    source_id=str(row.get('source_id', '')) if pd.notna(row.get('source_id')) else None,
+                                    source_date=row.get('source_date') if pd.notna(row.get('source_date')) else None,
+                                    sentiment=str(row.get('sentiment', '')) if pd.notna(row.get('sentiment')) else None,
+                                    language=str(row.get('language', '')) if pd.notna(row.get('language')) else None,
+                                    page_type=str(row.get('page_type', '')) if pd.notna(row.get('page_type')) else None,
+                                    category=str(row.get('category', '')) if pd.notna(row.get('category')) else None,
+                                    author=str(row.get('author', '')) if pd.notna(row.get('author')) else None,
+                                    url=str(row.get('url', '')) if pd.notna(row.get('url')) else None,
+                                    extra_data={
+                                        k: str(v) for k, v in row.items()
+                                        if k not in [
+                                            'full_text', 'source_id', 'source_date', 'sentiment',
+                                            'language', 'page_type', 'category', 'author', 'url'
+                                        ] and pd.notna(v)
+                                    }
+                                )
+                                verbatims.append(verbatim)
+
+                            db.bulk_save_objects(verbatims)
+                            db.commit()
+
+                            # Stocker l'ID du projet dans session state
+                            st.session_state.current_project_id = str(project.id)
+                            st.session_state.current_project_name = project_name
+
+                        st.success(f"✅ Dataset '{project_name}' importé avec succès! {len(verbatims)} verbatims insérés.")
+                        st.balloons()
+
+                        # Redirection
+                        st.info("➡️ Passez à l'étape de nettoyage")
+
+                    except Exception as e:
+                        st.error(f"❌ Erreur lors de l'import: {str(e)}")
+                        import traceback
+                        with st.expander("Détails de l'erreur"):
+                            st.code(traceback.format_exc())
