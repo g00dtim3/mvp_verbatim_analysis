@@ -305,7 +305,7 @@ else:
                         source_chunk_topic_ids=topic.get('source_chunk_topic_ids', [])
                     )
                     db.add(run_topic)
-                    db.flush()  # Pour obtenir l'ID
+                    # L'ID est disponible immédiatement (UUID généré par défaut)
 
                     # Créer le ProjectOntology pour ce topic
                     project_ontology = ProjectOntology(
