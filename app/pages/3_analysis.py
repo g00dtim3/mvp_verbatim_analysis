@@ -15,7 +15,7 @@ from src.api.analysis_llm import estimate_analysis_cost, check_cost_alerts
 from src.api.sampling import stratified_sample
 from src.utils.config import settings
 from src.db.connection import get_db
-from src.db.models import Project, ProjectVerbatim, AnalysisRun
+from src.db.models import Project, ProjectVerbatim, AnalysisRun, RunTopic, ProjectOntology, AnalysisChunk, ChunkTopic
 from src.llm.langgraph_pipeline import VerbatimAnalysisPipeline
 from sqlalchemy import func, desc
 import pandas as pd
@@ -272,15 +272,76 @@ else:
             )
             progress_bar.progress(90)
 
-            # Mettre à jour l'AnalysisRun
+            # Mettre à jour l'AnalysisRun et sauvegarder les résultats
             status_text.text("⏳ Sauvegarde des résultats...")
             with get_db() as db:
                 run = db.query(AnalysisRun).filter(AnalysisRun.id == run_id).first()
                 run.status = result['status']
                 run.completed_at = datetime.now()
                 run.total_verbatims = len(verbatims_to_analyze)
-                run.total_chunks = result.get('stats', {}).get('total_chunks', 0)
+                run.total_chunks = result.get('stats', {}).get('nb_chunks', 0)
+                run.chunks_success = result.get('stats', {}).get('chunks_success', 0)
+                run.chunks_failed = result.get('stats', {}).get('chunks_failed', 0)
                 run.total_themes = len(result.get('topics_quantified', []))
+
+                # Sauvegarder les chunks analysés
+                chunk_results = result.get('chunk_results', [])
+                for chunk_result in chunk_results:
+                    chunk = AnalysisChunk(
+                        run_id=run_id,
+                        chunk_index=chunk_result.get('chunk_index', 0),
+                        status=chunk_result.get('status', 'unknown'),
+                        nb_verbatims=len(result.get('chunks', [[]])[chunk_result.get('chunk_index', 0)]),
+                        tokens_used=chunk_result.get('tokens_used', 0),
+                        retry_count=0,
+                        error_message=chunk_result.get('error') if chunk_result.get('status') == 'failed' else None
+                    )
+                    db.add(chunk)
+
+                # Sauvegarder les thèmes bruts par chunk
+                all_themes = result.get('all_themes', [])
+                for theme_data in all_themes:
+                    chunk_topic = ChunkTopic(
+                        run_id=run_id,
+                        chunk_id=None,  # On pourrait faire une lookup mais pas critique
+                        label=theme_data.get('label', 'Unknown'),
+                        pain_or_benefit=theme_data.get('pain_or_benefit', 'neutral')
+                    )
+                    db.add(chunk_topic)
+
+                # Sauvegarder les thèmes fusionnés avec quantification
+                topics_quantified = result.get('topics_quantified', [])
+                for topic_data in topics_quantified:
+                    # Créer le RunTopic
+                    run_topic = RunTopic(
+                        run_id=run_id,
+                        canonical_label=topic_data.get('canonical_label', 'Unknown'),
+                        aliases=topic_data.get('aliases', []),
+                        pain_or_benefit=topic_data.get('pain_or_benefit', 'neutral'),
+                        merge_method=topic_data.get('merge_method', 'pass1_fuzzy'),
+                        volume_verbatims=topic_data.get('volume_verbatims', 0),
+                        volume_mentions=topic_data.get('volume_mentions', 0),
+                        pct_of_dataset=topic_data.get('pct_of_dataset', 0.0),
+                        source_chunk_ids=topic_data.get('source_chunk_ids', [])
+                    )
+                    db.add(run_topic)
+                    db.flush()  # Pour obtenir l'ID
+
+                    # Créer le ProjectOntology pour ce topic
+                    ontology = topic_data.get('ontology', {})
+                    project_ontology = ProjectOntology(
+                        run_id=run_id,
+                        topic_id=run_topic.id,
+                        label=topic_data.get('canonical_label', 'Unknown'),
+                        keywords=ontology.get('keywords', []),
+                        regex_patterns=ontology.get('regex_patterns', []),
+                        negative_keywords=ontology.get('negative_keywords', []),
+                        negation_patterns=ontology.get('negation_patterns', []),
+                        validated_by=None,
+                        validated_at=None
+                    )
+                    db.add(project_ontology)
+
                 db.commit()
 
             progress_bar.progress(100)
