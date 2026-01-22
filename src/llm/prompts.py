@@ -29,18 +29,23 @@ PROMPT_ANALYZE_VERBATIMS = """
 Analyse ces verbatims et identifie les thèmes principaux.
 
 Pour chaque thème, fournis:
-1. **Thème principal** (label court et clair)
-2. **Sous-thème** (si pertinent)
-3. **Pain points** (problèmes/frustrations exprimés)
-4. **Bénéfices attendus** (ce que les consommateurs recherchent)
-5. **Contexte d'usage** (quand/comment le produit est utilisé)
-6. **Exemples** (2-3 verbatims représentatifs, copiés exactement)
+1. **topic_label** (OBLIGATOIRE): Label court et clair du thème (2-5 mots, ex: "Efficacité du produit", "Texture et absorption", "Format et applicateur")
+2. **subtopic_label** (optionnel): Sous-thème si pertinent
+3. **pain_points**: Liste des problèmes/frustrations exprimés par les consommateurs
+4. **benefits**: Liste des bénéfices/aspects positifs mentionnés
+5. **usage_context**: Contexte d'usage (quand/comment le produit est utilisé)
+6. **example_verbatims**: 2-3 verbatims représentatifs, copiés exactement
+
+**IMPORTANT**:
+- Le topic_label doit être NEUTRE et décrire le SUJET (pas un jugement)
+- Les pain_points contiennent les aspects NÉGATIFS
+- Les benefits contiennent les aspects POSITIFS
 
 ## Format de sortie (JSON)
 {{
   "themes": [
     {{
-      "topic_label": "string",
+      "topic_label": "string (OBLIGATOIRE, 2-5 mots)",
       "subtopic_label": "string ou null",
       "pain_points": ["string"],
       "benefits": ["string"],
@@ -113,14 +118,19 @@ PROMPT_GENERATE_KEYWORDS = """
 ## Instructions
 Génère des règles de matching pour détecter ce thème dans des verbatims.
 
-1. **Keywords**: mots ou expressions qui indiquent ce thème
+**IMPORTANT**: Les keywords doivent détecter le SUJET/THÈME général, pas les sentiments ou jugements.
+
+1. **Keywords**: mots NEUTRES ou expressions qui indiquent qu'on parle de CE THÈME
+   - Concentre-toi sur le sujet/objet (ex: "efficacité", "résultats", "texture", "absorption")
+   - N'INCLUS PAS les jugements positifs ("efficace", "bien") ou négatifs ("inefficace", "sans effet")
    - Inclus les variantes (singulier/pluriel, synonymes)
    - Inclus les fautes d'orthographe courantes si pertinent
-   
-2. **Negative keywords**: mots qui, s'ils sont présents, indiquent un FAUX POSITIF
-   - Ex: pour "livraison rapide", "pas rapide" serait un négatif
-   
-3. **Regex patterns** (optionnel): pour des cas complexes
+
+2. **Negative keywords**: mots qui indiquent qu'on parle d'un AUTRE SUJET (faux positif)
+   - Ex: pour un thème "Efficacité produit", exclude "livraison", "prix", "emballage"
+   - NE liste PAS ici les jugements négatifs du thème (ça sera géré par pain_points)
+
+3. **Regex patterns** (optionnel): pour détecter des formulations complexes du THÈME
    - Utilise une syntaxe Python regex
 
 ## Format de sortie (JSON)

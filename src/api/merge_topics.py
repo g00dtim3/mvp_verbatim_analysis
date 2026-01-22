@@ -350,14 +350,28 @@ class TopicMerger:
             Thème fusionné
         """
         # Choisir le label canonique (le plus fréquent ou le premier)
-        canonical_label = topics[0].get('topic_label', '')
+        canonical_label = topics[0].get('topic_label', '').strip()
         canonical_subtopic = topics[0].get('subtopic_label')
+
+        # Fallback si topic_label est vide: utiliser pain_points ou benefits
+        if not canonical_label:
+            pain_points = topics[0].get('pain_points', [])
+            benefits = topics[0].get('benefits', [])
+            if pain_points:
+                canonical_label = pain_points[0][:50]  # Premier pain point (tronqué)
+            elif benefits:
+                canonical_label = benefits[0][:50]  # Premier bénéfice (tronqué)
+            else:
+                canonical_label = f"Theme_{source_indices[0]}"  # Dernier fallback
+            logger.warning(f"topic_label vide, fallback utilisé: {canonical_label}")
 
         # Collecter les alias
         aliases = []
         for t in topics[1:]:
-            label = t.get('topic_label', '')
+            label = t.get('topic_label', '').strip()
             sublabel = t.get('subtopic_label')
+            if not label:  # Skip empty labels
+                continue
             if sublabel:
                 aliases.append(f"{label} > {sublabel}")
             else:
