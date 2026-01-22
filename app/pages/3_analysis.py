@@ -282,32 +282,6 @@ else:
                 run.total_chunks = result.get('stats', {}).get('nb_chunks', 0)
                 run.chunks_success = result.get('stats', {}).get('chunks_success', 0)
                 run.chunks_failed = result.get('stats', {}).get('chunks_failed', 0)
-                run.total_themes = len(result.get('topics_quantified', []))
-
-                # Sauvegarder les chunks analysés
-                chunk_results = result.get('chunk_results', [])
-                for chunk_result in chunk_results:
-                    chunk = AnalysisChunk(
-                        run_id=run_id,
-                        chunk_index=chunk_result.get('chunk_index', 0),
-                        status=chunk_result.get('status', 'unknown'),
-                        nb_verbatims=len(result.get('chunks', [[]])[chunk_result.get('chunk_index', 0)]),
-                        tokens_used=chunk_result.get('tokens_used', 0),
-                        retry_count=0,
-                        error_message=chunk_result.get('error') if chunk_result.get('status') == 'failed' else None
-                    )
-                    db.add(chunk)
-
-                # Sauvegarder les thèmes bruts par chunk
-                all_themes = result.get('all_themes', [])
-                for theme_data in all_themes:
-                    chunk_topic = ChunkTopic(
-                        run_id=run_id,
-                        chunk_id=None,  # On pourrait faire une lookup mais pas critique
-                        label=theme_data.get('label', 'Unknown'),
-                        pain_or_benefit=theme_data.get('pain_or_benefit', 'neutral')
-                    )
-                    db.add(chunk_topic)
 
                 # Sauvegarder les thèmes fusionnés avec quantification
                 topics_quantified = result.get('topics_quantified', [])

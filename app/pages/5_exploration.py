@@ -34,14 +34,18 @@ try:
             AnalysisRun.id,
             AnalysisRun.brief,
             AnalysisRun.mode,
-            AnalysisRun.total_themes,
             AnalysisRun.total_verbatims,
             AnalysisRun.created_at,
-            Project.name.label('project_name')
+            Project.name.label('project_name'),
+            func.count(RunTopic.id).label('total_themes')
         ).join(
             Project, AnalysisRun.project_id == Project.id
+        ).outerjoin(
+            RunTopic, AnalysisRun.id == RunTopic.run_id
         ).filter(
             AnalysisRun.status == 'success'
+        ).group_by(
+            AnalysisRun.id, Project.name
         ).order_by(
             desc(AnalysisRun.created_at)
         ).all()
