@@ -285,25 +285,29 @@ else:
 
                 # Sauvegarder les thèmes fusionnés avec quantification
                 topics_quantified = result.get('topics_quantified', [])
-                for topic_data in topics_quantified:
-                    # Créer le RunTopic
+                for item in topics_quantified:
+                    # Extraire les données de la structure imbriquée
+                    topic = item.get('topic', {})
+                    ontology = item.get('ontology', {})
+                    metrics = item.get('metrics', {})
+
+                    # Créer le RunTopic avec les métriques de quantification
                     run_topic = RunTopic(
                         run_id=run_id,
-                        canonical_label=topic_data.get('canonical_label', 'Unknown'),
-                        aliases=topic_data.get('aliases', []),
-                        pain_points=topic_data.get('pain_points', []),
-                        benefits=topic_data.get('benefits', []),
-                        merge_method=topic_data.get('merge_method', 'pass1_fuzzy'),
-                        volume_verbatims=topic_data.get('volume_verbatims', 0),
-                        volume_mentions=topic_data.get('volume_mentions', 0),
-                        pct_of_dataset=topic_data.get('pct_of_dataset', 0.0),
-                        source_chunk_topic_ids=topic_data.get('source_chunk_topic_ids', [])
+                        canonical_label=topic.get('canonical_label', 'Unknown'),
+                        aliases=topic.get('aliases', []),
+                        pain_points=topic.get('pain_points', []),
+                        benefits=topic.get('benefits', []),
+                        merge_method=topic.get('merge_method', 'pass1_fuzzy'),
+                        volume_verbatims=metrics.get('volume_verbatims', 0),
+                        volume_mentions=metrics.get('volume_mentions', 0),
+                        pct_of_dataset=metrics.get('pct_of_dataset', 0.0),
+                        source_chunk_topic_ids=topic.get('source_chunk_topic_ids', [])
                     )
                     db.add(run_topic)
                     db.flush()  # Pour obtenir l'ID
 
                     # Créer le ProjectOntology pour ce topic
-                    ontology = topic_data.get('ontology', {})
                     project_ontology = ProjectOntology(
                         run_id=run_id,
                         topic_id=run_topic.id,
