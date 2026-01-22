@@ -116,9 +116,22 @@ st.header("📊 Synthèse des thèmes")
 # Créer un DataFrame avec les thèmes
 topics_data = []
 for topic in topics:
+    # Déterminer le type en fonction de pain_points et benefits
+    has_pains = topic.pain_points and len(topic.pain_points) > 0
+    has_benefits = topic.benefits and len(topic.benefits) > 0
+
+    if has_pains and has_benefits:
+        type_label = '😢😊 Mixte'
+    elif has_pains:
+        type_label = '😢 Pain'
+    elif has_benefits:
+        type_label = '😊 Bénéfice'
+    else:
+        type_label = '⚪ Neutre'
+
     topics_data.append({
         'Thème': topic.canonical_label,
-        'Type': '😢 Pain' if topic.pain_or_benefit == 'pain' else '😊 Bénéfice' if topic.pain_or_benefit == 'benefit' else '⚪ Neutre',
+        'Type': type_label,
         'Volume': topic.volume_verbatims,
         '% Dataset': f"{topic.pct_of_dataset:.1f}%",
         'Mentions': topic.volume_mentions
@@ -143,12 +156,12 @@ with col1:
     st.metric("Total thèmes", len(topics))
 
 with col2:
-    pain_count = sum(1 for t in topics if t.pain_or_benefit == 'pain')
-    st.metric("Pain points", pain_count)
+    pain_count = sum(1 for t in topics if t.pain_points and len(t.pain_points) > 0)
+    st.metric("Topics avec pains", pain_count)
 
 with col3:
-    benefit_count = sum(1 for t in topics if t.pain_or_benefit == 'benefit')
-    st.metric("Bénéfices", benefit_count)
+    benefit_count = sum(1 for t in topics if t.benefits and len(t.benefits) > 0)
+    st.metric("Topics avec bénéfices", benefit_count)
 
 with col4:
     total_volume = sum(t.volume_verbatims for t in topics)
