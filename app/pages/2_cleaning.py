@@ -238,8 +238,8 @@ if st.button("🚀 Nettoyer et dédupliquer", type="primary", use_container_widt
             with get_db() as db:
                 # Sauvegarder le texte nettoyé pour tous les verbatims
                 for i, verbatim in enumerate(verbatims):
-                    verbatim.cleaned_text = cleaned_texts[i]
-                    verbatim.is_duplicate = i not in indices_kept
+                    verbatim.full_text_clean = cleaned_texts[i]
+                    verbatim.dedup_flag = i not in indices_kept
 
                 db.commit()
 

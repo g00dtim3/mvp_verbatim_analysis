@@ -210,7 +210,7 @@ try:
                 'id': v.id,
                 'full_text': v.full_text,
                 'created_at': v.created_at,
-                'is_duplicate': v.is_duplicate
+                'dedup_flag': v.dedup_flag or False
             })
 
         # Charger les ontologies pour le highlighting
@@ -292,7 +292,7 @@ try:
                     if verbatim['created_at']:
                         st.caption(f"📅 {verbatim['created_at'].strftime('%Y-%m-%d')}")
                 with col2:
-                    if verbatim['is_duplicate']:
+                    if verbatim['dedup_flag']:
                         st.caption("⚠️ Doublon détecté")
     else:
         st.info("Aucun verbatim trouvé pour ce filtre")
