@@ -120,24 +120,33 @@ for i, (key, label) in enumerate(CLEANING_OPTIONS.items()):
 # Preview du nettoyage
 st.header("2️⃣ Aperçu du nettoyage")
 
-sample_texts = [
-    "Produit GÉNIAL!!! 😍 https://example.com",
-    "Livraison RAPIDE   mais emballage    moyen",
-    "Je n'ai jamais reçu ma commande 😠😠😠"
-]
-
 if st.button("🔍 Voir un aperçu"):
-    examples = get_cleaning_examples(
-        sample_texts,
-        st.session_state.clean_options,
-        n=3
-    )
+    try:
+        with get_db() as db:
+            # Charger un échantillon de vraies données du projet
+            sample_verbatims = db.query(ProjectVerbatim.full_text).filter(
+                ProjectVerbatim.project_id == selected_project_id
+            ).limit(5).all()
 
-    for ex in examples:
-        st.markdown("---")
-        st.markdown(f"**Avant:** `{ex['before']}`")
-        st.markdown(f"**Après:** `{ex['after']}`")
-        st.caption(f"Longueur: {ex['length_before']} → {ex['length_after']} caractères")
+            sample_texts = [v.full_text for v in sample_verbatims if v.full_text]
+
+        if not sample_texts:
+            st.warning("Aucun verbatim trouvé dans ce projet")
+        else:
+            examples = get_cleaning_examples(
+                sample_texts,
+                st.session_state.clean_options,
+                n=len(sample_texts)
+            )
+
+            for ex in examples:
+                st.markdown("---")
+                st.markdown(f"**Avant:** `{ex['before']}`")
+                st.markdown(f"**Après:** `{ex['after']}`")
+                st.caption(f"Longueur: {ex['length_before']} → {ex['length_after']} caractères")
+
+    except Exception as e:
+        st.error(f"Erreur lors du chargement de l'aperçu: {str(e)}")
 
 # Déduplication
 st.header("3️⃣ Déduplication")
@@ -157,40 +166,101 @@ st.caption(f"Seuil actuel: **{st.session_state.dedup_threshold:.2f}**")
 
 # Preview doublons
 if st.button("🔍 Détecter les doublons potentiels"):
-    sample_dups = [
-        "Produit conforme à mes attentes",
-        "Produit conforme a mes attentes.",
-        "Le produit correspond bien à mes attentes",
-        "Service client très réactif"
-    ]
+    try:
+        with st.spinner("Recherche de doublons..."):
+            with get_db() as db:
+                # Charger un échantillon pour la détection rapide
+                sample_verbatims = db.query(ProjectVerbatim.full_text).filter(
+                    ProjectVerbatim.project_id == selected_project_id
+                ).limit(100).all()
 
-    examples = get_duplicate_examples(
-        sample_dups,
-        threshold=st.session_state.dedup_threshold,
-        n=5
-    )
+                sample_texts = [v.full_text for v in sample_verbatims if v.full_text]
 
-    if examples:
-        st.success(f"✅ {len(examples)} paires de doublons détectées")
+            if not sample_texts:
+                st.warning("Aucun verbatim trouvé dans ce projet")
+            else:
+                examples = get_duplicate_examples(
+                    sample_texts,
+                    threshold=st.session_state.dedup_threshold,
+                    n=10
+                )
 
-        for ex in examples[:3]:
-            with st.expander(f"Similarité: {ex['similarity']:.1%}"):
-                st.markdown(f"**Texte 1:** {ex['text1']}")
-                st.markdown(f"**Texte 2:** {ex['text2']}")
-    else:
-        st.info("Aucun doublon détecté avec ce seuil")
+                if examples:
+                    st.success(f"✅ {len(examples)} paires de doublons détectées (sur échantillon de {len(sample_texts)} verbatims)")
+
+                    for ex in examples[:5]:
+                        with st.expander(f"Similarité: {ex['similarity']:.1%}"):
+                            st.markdown(f"**Texte 1:** {ex['text1']}")
+                            st.markdown(f"**Texte 2:** {ex['text2']}")
+                else:
+                    st.info("Aucun doublon détecté avec ce seuil")
+
+    except Exception as e:
+        st.error(f"Erreur lors de la détection: {str(e)}")
 
 # Lancer le nettoyage
 st.header("4️⃣ Lancer le traitement")
 
 if st.button("🚀 Nettoyer et dédupliquer", type="primary", use_container_width=True):
-    with st.spinner("Traitement en cours..."):
-        # TODO: Implémenter le traitement réel
-        import time
-        time.sleep(2)
+    try:
+        with st.spinner("Chargement des verbatims..."):
+            with get_db() as db:
+                # Charger tous les verbatims du projet
+                verbatims = db.query(ProjectVerbatim).filter(
+                    ProjectVerbatim.project_id == selected_project_id
+                ).all()
 
+                if not verbatims:
+                    st.error("Aucun verbatim trouvé dans ce projet")
+                    st.stop()
+
+                # Extraire les textes
+                original_texts = [v.full_text for v in verbatims]
+
+        # Étape 1: Nettoyage
+        with st.spinner(f"Nettoyage de {len(original_texts)} verbatims..."):
+            cleaned_texts = clean_verbatims(
+                original_texts,
+                st.session_state.clean_options
+            )
+
+        # Étape 2: Déduplication
+        with st.spinner("Déduplication en cours..."):
+            from src.api.deduplication import deduplicate_texts
+
+            texts_unique, indices_kept, dedup_stats = deduplicate_texts(
+                cleaned_texts,
+                threshold=st.session_state.dedup_threshold
+            )
+
+        # Étape 3: Sauvegarde dans la base
+        with st.spinner("Sauvegarde dans la base de données..."):
+            with get_db() as db:
+                # Sauvegarder le texte nettoyé pour tous les verbatims
+                for i, verbatim in enumerate(verbatims):
+                    verbatim.cleaned_text = cleaned_texts[i]
+                    verbatim.is_duplicate = i not in indices_kept
+
+                db.commit()
+
+        # Afficher les résultats
         st.success("✅ Nettoyage et déduplication terminés!")
-        st.info("➡️ Passez à l'étape d'analyse")
+
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Verbatims nettoyés", len(cleaned_texts))
+        with col2:
+            st.metric("Doublons détectés", dedup_stats['removed'])
+        with col3:
+            st.metric("Verbatims uniques", dedup_stats['total_after'])
+
+        st.info("➡️ Les données sont prêtes pour l'analyse. Passez à l'étape suivante!")
 
         if st.button("Continuer vers l'analyse"):
             st.switch_page("pages/3_analysis.py")
+
+    except Exception as e:
+        st.error(f"❌ Erreur lors du traitement: {str(e)}")
+        import traceback
+        with st.expander("Détails de l'erreur"):
+            st.code(traceback.format_exc())
