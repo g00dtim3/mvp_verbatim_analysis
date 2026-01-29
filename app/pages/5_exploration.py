@@ -198,14 +198,23 @@ with get_db() as db:
         ProjectOntology.run_id == uuid.UUID(selected_run_id)
     ).all()
 
-    # Convertir en liste de dictionnaires
+    # Convertir en liste de dictionnaires et décoder Unicode
+    def decode_unicode_string(s):
+        """Décode les séquences Unicode échappées dans une chaîne."""
+        try:
+            if isinstance(s, str) and '\\u' in s:
+                return s.encode('utf-8').decode('unicode_escape')
+            return s
+        except (UnicodeDecodeError, AttributeError):
+            return s
+
     ontologies = []
     for onto, label in ontologies_raw:
         ontologies.append({
             'label': label,
-            'keywords': onto.keywords or [],
-            'regex_patterns': onto.regex_patterns or [],
-            'negative_keywords': onto.negative_keywords or []
+            'keywords': [decode_unicode_string(kw) for kw in (onto.keywords or [])],
+            'regex_patterns': [decode_unicode_string(p) for p in (onto.regex_patterns or [])],
+            'negative_keywords': [decode_unicode_string(kw) for kw in (onto.negative_keywords or [])]
         })
 
 for onto in ontologies:

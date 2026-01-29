@@ -54,14 +54,14 @@ def count_tokens(text: str, model: str = None) -> int:
 def estimate_cost(input_tokens: int, output_tokens: int, model: str = None) -> float:
     """
     Estime le coût d'un appel LLM.
-    
+
     Prix approximatifs (à mettre à jour):
     - gpt-4-turbo: $0.01/1K input, $0.03/1K output
     - gpt-4: $0.03/1K input, $0.06/1K output
     - gpt-3.5-turbo: $0.0005/1K input, $0.0015/1K output
     """
     model = model or settings.openai_model
-    
+
     # Prix par 1K tokens (input, output)
     pricing = {
         "gpt-4-turbo-preview": (0.01, 0.03),
@@ -69,11 +69,38 @@ def estimate_cost(input_tokens: int, output_tokens: int, model: str = None) -> f
         "gpt-4": (0.03, 0.06),
         "gpt-3.5-turbo": (0.0005, 0.0015),
     }
-    
+
     input_price, output_price = pricing.get(model, (0.01, 0.03))
-    
+
     cost = (input_tokens / 1000 * input_price) + (output_tokens / 1000 * output_price)
     return round(cost, 4)
+
+
+def _decode_unicode_in_dict(obj: Any) -> Any:
+    """
+    Décode récursivement les séquences Unicode échappées dans un dict/list.
+
+    Convertit 'efficacit\\u00e9' en 'efficacité'.
+
+    Args:
+        obj: Objet à décoder (dict, list, str, ou autre)
+
+    Returns:
+        Objet avec chaînes Unicode décodées
+    """
+    if isinstance(obj, dict):
+        return {key: _decode_unicode_in_dict(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [_decode_unicode_in_dict(item) for item in obj]
+    elif isinstance(obj, str):
+        # Décoder les séquences Unicode si présentes
+        try:
+            return obj.encode('utf-8').decode('unicode_escape')
+        except (UnicodeDecodeError, UnicodeEncodeError):
+            # Si échec, retourner la chaîne originale
+            return obj
+    else:
+        return obj
 
 
 @retry(
@@ -163,20 +190,25 @@ def call_llm_json(
 ) -> Dict[str, Any]:
     """
     Appelle l'API OpenAI avec réponse JSON forcée.
-    
+
     Returns:
         Le résultat de call_llm avec content parsé en JSON
     """
     import json
-    
+
     result = call_llm(
         messages=messages,
         response_format={"type": "json_object"},
         **kwargs
     )
-    
+
     try:
-        result["content_json"] = json.loads(result["content"])
+        # Parser le JSON avec ensure_ascii=False pour préserver les caractères Unicode
+        content_str = result["content"]
+        result["content_json"] = json.loads(content_str)
+
+        # S'assurer que les chaînes Unicode sont correctement décodées
+        result["content_json"] = _decode_unicode_in_dict(result["content_json"])
     except json.JSONDecodeError as e:
         logger.error(f"Erreur parsing JSON: {e}")
         result["content_json"] = None

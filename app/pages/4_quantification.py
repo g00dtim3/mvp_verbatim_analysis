@@ -142,9 +142,22 @@ try:
                     st.markdown("**Keywords positifs:**")
                     keywords = ontology.keywords or []
                     if keywords:
+                        # Décoder les séquences Unicode si nécessaire
+                        decoded_keywords = []
+                        for kw in keywords:
+                            try:
+                                # Si la chaîne contient des séquences Unicode échappées
+                                if '\\u' in str(kw):
+                                    decoded = kw.encode('utf-8').decode('unicode_escape')
+                                    decoded_keywords.append(decoded)
+                                else:
+                                    decoded_keywords.append(kw)
+                            except (UnicodeDecodeError, AttributeError):
+                                decoded_keywords.append(kw)
+
                         keywords_text = st.text_area(
                             "Keywords",
-                            value="\n".join(keywords),
+                            value="\n".join(decoded_keywords),
                             height=150,
                             key=f"kw_{topic.id}",
                             label_visibility="collapsed",
@@ -157,9 +170,21 @@ try:
                     st.markdown("**Keywords négatifs:**")
                     neg_keywords = ontology.negative_keywords or []
                     if neg_keywords:
+                        # Décoder les séquences Unicode si nécessaire
+                        decoded_neg_keywords = []
+                        for kw in neg_keywords:
+                            try:
+                                if '\\u' in str(kw):
+                                    decoded = kw.encode('utf-8').decode('unicode_escape')
+                                    decoded_neg_keywords.append(decoded)
+                                else:
+                                    decoded_neg_keywords.append(kw)
+                            except (UnicodeDecodeError, AttributeError):
+                                decoded_neg_keywords.append(kw)
+
                         neg_keywords_text = st.text_area(
                             "Negative Keywords",
-                            value="\n".join(neg_keywords),
+                            value="\n".join(decoded_neg_keywords),
                             height=150,
                             key=f"neg_{topic.id}",
                             label_visibility="collapsed",
