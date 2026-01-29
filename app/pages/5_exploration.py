@@ -197,11 +197,21 @@ try:
         # Charger les verbatims du projet
         from src.db.models import ProjectVerbatim
 
-        verbatims_query = db.query(ProjectVerbatim).join(
+        verbatims_raw = db.query(ProjectVerbatim).join(
             AnalysisRun, ProjectVerbatim.project_id == AnalysisRun.project_id
         ).filter(
             AnalysisRun.id == uuid.UUID(selected_run_id)
         ).all()
+
+        # Convertir en dictionnaires pour éviter DetachedInstanceError
+        verbatims_list = []
+        for v in verbatims_raw:
+            verbatims_list.append({
+                'id': v.id,
+                'full_text': v.full_text,
+                'created_at': v.created_at,
+                'is_duplicate': v.is_duplicate
+            })
 
         # Charger les ontologies pour le highlighting
         ontologies_map = {}
@@ -239,8 +249,8 @@ try:
 
     # Filtrer et afficher
     if selected_topic_filter == "Tous les verbatims":
-        verbatims_to_show = verbatims_query[:50]  # Limit pour performance
-        st.caption(f"Affichage des 50 premiers verbatims sur {len(verbatims_query)} au total")
+        verbatims_to_show = verbatims_list[:50]  # Limit pour performance
+        st.caption(f"Affichage des 50 premiers verbatims sur {len(verbatims_list)} au total")
         keywords_to_highlight = []
     else:
         # Filtrer par thème en utilisant quantification
@@ -251,9 +261,9 @@ try:
         negative_keywords = ontology.get('negative_keywords', [])
 
         matched_verbatims = []
-        for v in verbatims_query:
+        for v in verbatims_list:
             matched = match_keywords_in_text(
-                text=v.full_text,
+                text=v['full_text'],
                 keywords=keywords,
                 negative_keywords=negative_keywords
             )
@@ -267,7 +277,7 @@ try:
     # Afficher les verbatims
     if verbatims_to_show:
         for i, verbatim in enumerate(verbatims_to_show, 1):
-            text_to_display = verbatim.full_text
+            text_to_display = verbatim['full_text']
 
             # Highlighter les keywords si un thème est sélectionné
             if keywords_to_highlight:
@@ -279,10 +289,10 @@ try:
                 # Afficher métadonnées si disponibles
                 col1, col2 = st.columns(2)
                 with col1:
-                    if verbatim.created_at:
-                        st.caption(f"📅 {verbatim.created_at.strftime('%Y-%m-%d')}")
+                    if verbatim['created_at']:
+                        st.caption(f"📅 {verbatim['created_at'].strftime('%Y-%m-%d')}")
                 with col2:
-                    if verbatim.is_duplicate:
+                    if verbatim['is_duplicate']:
                         st.caption("⚠️ Doublon détecté")
     else:
         st.info("Aucun verbatim trouvé pour ce filtre")
