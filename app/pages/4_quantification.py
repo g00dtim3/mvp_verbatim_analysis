@@ -12,6 +12,7 @@ project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 from src.utils.config import settings
+from src.utils.encoding import fix_encoding_in_list
 from src.db.connection import get_db
 from src.db.models import AnalysisRun, RunTopic, ProjectOntology, Project
 from sqlalchemy import func, desc
@@ -142,18 +143,8 @@ try:
                     st.markdown("**Keywords positifs:**")
                     keywords = ontology.keywords or []
                     if keywords:
-                        # Décoder les séquences Unicode si nécessaire
-                        decoded_keywords = []
-                        for kw in keywords:
-                            try:
-                                # Si la chaîne contient des séquences Unicode échappées
-                                if '\\u' in str(kw):
-                                    decoded = kw.encode('utf-8').decode('unicode_escape')
-                                    decoded_keywords.append(decoded)
-                                else:
-                                    decoded_keywords.append(kw)
-                            except (UnicodeDecodeError, AttributeError):
-                                decoded_keywords.append(kw)
+                        # Corriger l'encodage
+                        decoded_keywords = fix_encoding_in_list(keywords)
 
                         keywords_text = st.text_area(
                             "Keywords",
@@ -170,17 +161,8 @@ try:
                     st.markdown("**Keywords négatifs:**")
                     neg_keywords = ontology.negative_keywords or []
                     if neg_keywords:
-                        # Décoder les séquences Unicode si nécessaire
-                        decoded_neg_keywords = []
-                        for kw in neg_keywords:
-                            try:
-                                if '\\u' in str(kw):
-                                    decoded = kw.encode('utf-8').decode('unicode_escape')
-                                    decoded_neg_keywords.append(decoded)
-                                else:
-                                    decoded_neg_keywords.append(kw)
-                            except (UnicodeDecodeError, AttributeError):
-                                decoded_neg_keywords.append(kw)
+                        # Corriger l'encodage
+                        decoded_neg_keywords = fix_encoding_in_list(neg_keywords)
 
                         neg_keywords_text = st.text_area(
                             "Negative Keywords",
