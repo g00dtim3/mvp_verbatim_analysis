@@ -6,138 +6,211 @@ import streamlit as st
 from pathlib import Path
 import sys
 import pandas as pd
+import uuid
 
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 from src.utils.config import settings
+from src.db.connection import get_db
+from src.db.models import AnalysisRun, RunTopic, ProjectOntology, Project
+from sqlalchemy import func, desc
 
 st.set_page_config(page_title="Quantification", page_icon="📊", layout="wide")
 
 st.title("📊 Quantification & Ontologie Projet")
 
-# Session state
-if "ontology_validated" not in st.session_state:
-    st.session_state.ontology_validated = False
-
-# Info GIDA
-st.header("ℹ️ Information")
-
-col1, col2 = st.columns([3, 1])
-
-with col1:
-    st.info(f"📚 Analyse réalisée avec **GIDA v{settings.gida_version}**")
-
-with col2:
-    st.metric("Thèmes détectés", 25)
-
-# Ontologie projet
-st.header("1️⃣ Ontologie Projet (optionnel)")
-
-st.markdown("""
-L'ontologie projet contient les keywords et regex générés par le LLM pour chaque thème.
-Vous pouvez la valider et l'ajuster avant la quantification finale.
+# Info
+st.info("""
+ℹ️ **Note**: La quantification est automatiquement effectuée lors de l'analyse LLM.
+Cette page vous permet de visualiser et ajuster les ontologies générées.
 """)
 
-validation_option = st.radio(
-    "Que souhaitez-vous faire?",
-    ["Skip (utiliser l'ontologie générée automatiquement)", "Valider et ajuster l'ontologie"],
-    help="La validation est recommandée pour garantir la précision du comptage"
-)
+# Sélection d'une analyse
+st.header("📁 Sélection de l'analyse")
 
-if validation_option.startswith("Valider"):
-    st.warning("🔍 **Validation recommandée**")
+try:
+    with get_db() as db:
+        # Charger toutes les analyses terminées
+        runs = db.query(
+            AnalysisRun.id,
+            AnalysisRun.brief,
+            AnalysisRun.created_at,
+            Project.name.label('project_name'),
+            func.count(RunTopic.id).label('total_themes')
+        ).join(
+            Project, AnalysisRun.project_id == Project.id
+        ).outerjoin(
+            RunTopic, AnalysisRun.id == RunTopic.run_id
+        ).filter(
+            AnalysisRun.status == 'success'
+        ).group_by(
+            AnalysisRun.id, Project.name
+        ).order_by(
+            desc(AnalysisRun.created_at)
+        ).all()
 
-    # Mock données
-    themes_sample = [
-        {
-            "theme": "Livraison rapide",
-            "keywords": ["livraison rapide", "livré rapidement", "livraison express", "délai court"],
-            "negative_keywords": ["pas rapide", "trop lent"],
-            "examples": 15
-        },
-        {
-            "theme": "Emballage",
-            "keywords": ["emballage", "packaging", "colis", "carton"],
-            "negative_keywords": ["sans emballage"],
-            "examples": 42
-        },
-        {
-            "theme": "Qualité du produit",
-            "keywords": ["qualité", "bien fait", "solide", "robuste", "durable"],
-            "negative_keywords": ["mauvaise qualité", "pas de qualité"],
-            "examples": 78
+        if not runs:
+            st.warning("⚠️ Aucune analyse terminée. Lancez d'abord une analyse.")
+            if st.button("← Aller à l'analyse"):
+                st.switch_page("pages/3_analysis.py")
+            st.stop()
+
+        # Sélecteur
+        run_options = {
+            str(r.id): f"{r.project_name} - {r.brief[:50]}... ({r.total_themes} thèmes, {r.created_at.strftime('%Y-%m-%d %H:%M')})"
+            for r in runs
         }
-    ]
 
-    for theme_data in themes_sample:
-        with st.expander(f"🏷️ {theme_data['theme']} ({theme_data['examples']} verbatims matchés)"):
-            col1, col2 = st.columns(2)
+        selected_run_id = st.selectbox(
+            "Choisir une analyse",
+            options=list(run_options.keys()),
+            format_func=lambda x: run_options[x]
+        )
 
-            with col1:
-                st.markdown("**Keywords:**")
-                keywords_text = st.text_area(
-                    "Keywords",
-                    value="\n".join(theme_data['keywords']),
-                    height=100,
-                    key=f"kw_{theme_data['theme']}",
-                    label_visibility="collapsed"
-                )
+        # Afficher les infos
+        selected_run = next(r for r in runs if str(r.id) == selected_run_id)
 
-            with col2:
-                st.markdown("**Negative Keywords:**")
-                neg_keywords_text = st.text_area(
-                    "Negative Keywords",
-                    value="\n".join(theme_data['negative_keywords']),
-                    height=100,
-                    key=f"neg_{theme_data['theme']}",
-                    label_visibility="collapsed"
-                )
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Projet", selected_run.project_name)
+        with col2:
+            st.metric("Thèmes quantifiés", selected_run.total_themes)
+        with col3:
+            st.metric("GIDA Version", f"v{settings.gida_version}")
 
-    if st.button("✅ Valider l'ontologie", type="primary"):
-        st.session_state.ontology_validated = True
-        st.success("Ontologie validée!")
-else:
-    st.info("✓ L'ontologie générée automatiquement sera utilisée")
-    st.session_state.ontology_validated = True
+except Exception as e:
+    st.error(f"Erreur lors du chargement: {str(e)}")
+    st.stop()
 
-# Quantification
-if st.session_state.ontology_validated:
-    st.header("2️⃣ Lancer la quantification")
+st.divider()
 
-    st.markdown("""
-    La quantification va compter de manière **déterministe** (Python) le nombre d'occurrences
-    de chaque thème dans le dataset complet.
-    """)
+# Charger les ontologies et les résultats de quantification
+st.header("1️⃣ Ontologies & Résultats de quantification")
 
-    st.markdown("**Métriques calculées:**")
-    st.markdown("""
-    - **volume_verbatims**: Nombre de verbatims contenant ≥ 1 match
-    - **volume_mentions**: Nombre de keywords distincts détectés
-    - **pct_of_dataset**: Pourcentage du dataset total
-    """)
+st.markdown("""
+Les ontologies contiennent les keywords et regex générés par le LLM pour chaque thème.
+La quantification a déjà été effectuée automatiquement lors de l'analyse.
+""")
 
-    if st.button("🚀 Lancer la quantification", type="primary", use_container_width=True):
-        with st.spinner("Quantification en cours..."):
-            import time
-            time.sleep(2)
+try:
+    with get_db() as db:
+        # Charger les topics avec leurs ontologies
+        topics_with_ontologies = db.query(
+            RunTopic,
+            ProjectOntology
+        ).join(
+            ProjectOntology, RunTopic.id == ProjectOntology.topic_id
+        ).filter(
+            RunTopic.run_id == uuid.UUID(selected_run_id)
+        ).all()
 
-            st.success("✅ Quantification terminée!")
+        if not topics_with_ontologies:
+            st.warning("Aucune ontologie trouvée pour cette analyse.")
+            st.stop()
 
-            # Résultats mock
-            st.header("📈 Résultats")
+        # Afficher les résultats de quantification
+        st.subheader("📊 Résultats de la quantification")
 
-            results_df = pd.DataFrame([
-                {"Thème": "Qualité du produit", "Volume (verbatims)": 234, "Volume (mentions)": 12, "% dataset": 15.2},
-                {"Thème": "Livraison rapide", "Volume (verbatims)": 189, "Volume (mentions)": 8, "% dataset": 12.3},
-                {"Thème": "Emballage", "Volume (verbatims)": 156, "Volume (mentions)": 6, "% dataset": 10.1},
-                {"Thème": "Service client", "Volume (verbatims)": 98, "Volume (mentions)": 5, "% dataset": 6.4},
-                {"Thème": "Prix", "Volume (verbatims)": 67, "Volume (mentions)": 4, "% dataset": 4.3},
-            ])
+        results_data = []
+        for topic, _ in topics_with_ontologies:
+            results_data.append({
+                "Thème": topic.canonical_label,
+                "Volume (verbatims)": topic.volume_verbatims,
+                "Volume (mentions)": topic.volume_mentions,
+                "% dataset": topic.pct_of_dataset
+            })
 
-            st.dataframe(results_df, use_container_width=True)
+        results_df = pd.DataFrame(results_data)
+        results_df = results_df.sort_values("Volume (verbatims)", ascending=False)
 
-            # Navigation
-            st.info("➡️ Explorez les résultats détaillés")
-            if st.button("Continuer vers l'exploration"):
-                st.switch_page("pages/5_exploration.py")
+        st.dataframe(results_df, use_container_width=True, hide_index=True)
+
+        # Visualiser/éditer les ontologies
+        st.divider()
+        st.subheader("🔍 Ontologies générées")
+
+        st.markdown("Cliquez sur un thème pour voir et ajuster son ontologie:")
+
+        for topic, ontology in topics_with_ontologies:
+            with st.expander(
+                f"🏷️ {topic.canonical_label} ({topic.volume_verbatims} verbatims matchés, {topic.pct_of_dataset:.1f}%)"
+            ):
+                col1, col2 = st.columns(2)
+
+                with col1:
+                    st.markdown("**Keywords positifs:**")
+                    keywords = ontology.keywords or []
+                    if keywords:
+                        keywords_text = st.text_area(
+                            "Keywords",
+                            value="\n".join(keywords),
+                            height=150,
+                            key=f"kw_{topic.id}",
+                            label_visibility="collapsed",
+                            help="Un keyword par ligne"
+                        )
+                    else:
+                        st.caption("Aucun keyword défini")
+
+                with col2:
+                    st.markdown("**Keywords négatifs:**")
+                    neg_keywords = ontology.negative_keywords or []
+                    if neg_keywords:
+                        neg_keywords_text = st.text_area(
+                            "Negative Keywords",
+                            value="\n".join(neg_keywords),
+                            height=150,
+                            key=f"neg_{topic.id}",
+                            label_visibility="collapsed",
+                            help="Un keyword négatif par ligne"
+                        )
+                    else:
+                        st.caption("Aucun keyword négatif")
+
+                # Regex patterns
+                regex_patterns = ontology.regex_patterns or []
+                if regex_patterns:
+                    st.markdown("**Patterns regex:**")
+                    for pattern in regex_patterns[:5]:
+                        st.code(pattern, language="regex")
+                    if len(regex_patterns) > 5:
+                        st.caption(f"... et {len(regex_patterns) - 5} autres patterns")
+
+                # Pain points et benefits
+                col3, col4 = st.columns(2)
+                with col3:
+                    if topic.pain_points:
+                        st.markdown("**Pain points:**")
+                        for pp in topic.pain_points[:3]:
+                            st.caption(f"• {pp}")
+                        if len(topic.pain_points) > 3:
+                            st.caption(f"... et {len(topic.pain_points) - 3} autres")
+
+                with col4:
+                    if topic.benefits:
+                        st.markdown("**Bénéfices:**")
+                        for b in topic.benefits[:3]:
+                            st.caption(f"• {b}")
+                        if len(topic.benefits) > 3:
+                            st.caption(f"... et {len(topic.benefits) - 3} autres")
+
+        # Note sur la sauvegarde
+        st.info("""
+        💡 **Note**: Les modifications d'ontologies nécessiteraient une re-quantification pour être prises en compte.
+        Cette fonctionnalité sera disponible dans une version future.
+        """)
+
+except Exception as e:
+    st.error(f"Erreur lors du chargement des ontologies: {str(e)}")
+    import traceback
+    with st.expander("Détails de l'erreur"):
+        st.code(traceback.format_exc())
+
+# Navigation
+st.divider()
+st.info("➡️ Pour explorer les résultats en détail, utilisez la page d'exploration")
+if st.button("Continuer vers l'exploration", use_container_width=True):
+    # Stocker l'ID du run dans la session pour la page exploration
+    st.session_state.current_run_id = selected_run_id
+    st.switch_page("pages/5_exploration.py")
