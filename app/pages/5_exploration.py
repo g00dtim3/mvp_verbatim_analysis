@@ -129,22 +129,21 @@ st.header("📊 Synthèse des thèmes")
 # Créer un DataFrame avec les thèmes
 topics_data = []
 for topic in topics:
-    # Déterminer le type en fonction de pain_points et benefits
-    has_pains = topic['pain_points'] and len(topic['pain_points']) > 0
-    has_benefits = topic['benefits'] and len(topic['benefits']) > 0
+    # Calculer la proportion pain/benefit
+    nb_pains = len(topic['pain_points']) if topic['pain_points'] else 0
+    nb_benefits = len(topic['benefits']) if topic['benefits'] else 0
+    total_sentiment = nb_pains + nb_benefits
 
-    if has_pains and has_benefits:
-        type_label = '😢😊 Mixte'
-    elif has_pains:
-        type_label = '😢 Pain'
-    elif has_benefits:
-        type_label = '😊 Bénéfice'
+    if total_sentiment > 0:
+        pct_pain = (nb_pains / total_sentiment) * 100
+        pct_benefit = (nb_benefits / total_sentiment) * 100
+        sentiment_label = f"{pct_pain:.0f}% Pain / {pct_benefit:.0f}% Bénéfice"
     else:
-        type_label = '⚪ Neutre'
+        sentiment_label = "Neutre"
 
     topics_data.append({
         'Thème': topic['canonical_label'],
-        'Type': type_label,
+        'Sentiment': sentiment_label,
         'Volume': topic['volume_verbatims'],
         '% Dataset': f"{topic['pct_of_dataset']:.1f}%",
         'Mentions': topic['volume_mentions']
@@ -180,6 +179,119 @@ with col4:
     total_volume = sum(t['volume_verbatims'] for t in topics)
     coverage = (total_volume / selected_run.total_verbatims * 100) if selected_run.total_verbatims > 0 else 0
     st.metric("Couverture", f"{coverage:.1f}%")
+
+# Explorer les verbatims
+st.divider()
+st.header("🔎 Explorer les verbatims")
+
+# Filtre par thème
+topic_options = ["Tous les verbatims"] + [t['canonical_label'] for t in topics]
+selected_topic_filter = st.selectbox(
+    "Filtrer par thème",
+    options=topic_options,
+    help="Sélectionnez un thème pour voir uniquement les verbatims correspondants"
+)
+
+try:
+    with get_db() as db:
+        # Charger les verbatims du projet
+        from src.db.models import ProjectVerbatim
+
+        verbatims_query = db.query(ProjectVerbatim).join(
+            AnalysisRun, ProjectVerbatim.project_id == AnalysisRun.project_id
+        ).filter(
+            AnalysisRun.id == uuid.UUID(selected_run_id)
+        ).all()
+
+        # Charger les ontologies pour le highlighting
+        ontologies_map = {}
+        ontologies_raw = db.query(
+            ProjectOntology,
+            RunTopic.id,
+            RunTopic.canonical_label
+        ).join(
+            RunTopic, ProjectOntology.topic_id == RunTopic.id
+        ).filter(
+            ProjectOntology.run_id == uuid.UUID(selected_run_id)
+        ).all()
+
+        for onto, topic_id, topic_label in ontologies_raw:
+            ontologies_map[topic_label] = {
+                'keywords': onto.keywords or [],
+                'negative_keywords': onto.negative_keywords or [],
+                'regex_patterns': onto.regex_patterns or []
+            }
+
+    # Fonction pour highlighter les keywords
+    def highlight_keywords(text, keywords):
+        """Met en surbrillance les keywords dans le texte."""
+        if not text:
+            return ""
+
+        highlighted = text
+        for kw in keywords:
+            # Simple replacement case-insensitive
+            import re
+            pattern = re.compile(re.escape(kw), re.IGNORECASE)
+            highlighted = pattern.sub(lambda m: f"**{m.group()}**", highlighted)
+
+        return highlighted
+
+    # Filtrer et afficher
+    if selected_topic_filter == "Tous les verbatims":
+        verbatims_to_show = verbatims_query[:50]  # Limit pour performance
+        st.caption(f"Affichage des 50 premiers verbatims sur {len(verbatims_query)} au total")
+        keywords_to_highlight = []
+    else:
+        # Filtrer par thème en utilisant quantification
+        from src.api.quantification import match_keywords_in_text
+
+        ontology = ontologies_map.get(selected_topic_filter, {})
+        keywords = ontology.get('keywords', [])
+        negative_keywords = ontology.get('negative_keywords', [])
+
+        matched_verbatims = []
+        for v in verbatims_query:
+            matched = match_keywords_in_text(
+                text=v.full_text,
+                keywords=keywords,
+                negative_keywords=negative_keywords
+            )
+            if matched:
+                matched_verbatims.append(v)
+
+        verbatims_to_show = matched_verbatims[:50]
+        keywords_to_highlight = keywords
+        st.caption(f"Affichage de {len(verbatims_to_show)} verbatims matchant '{selected_topic_filter}' (max 50)")
+
+    # Afficher les verbatims
+    if verbatims_to_show:
+        for i, verbatim in enumerate(verbatims_to_show, 1):
+            text_to_display = verbatim.full_text
+
+            # Highlighter les keywords si un thème est sélectionné
+            if keywords_to_highlight:
+                text_to_display = highlight_keywords(text_to_display, keywords_to_highlight[:5])
+
+            with st.expander(f"Verbatim #{i}: {text_to_display[:80]}...", expanded=False):
+                st.markdown(text_to_display)
+
+                # Afficher métadonnées si disponibles
+                col1, col2 = st.columns(2)
+                with col1:
+                    if verbatim.created_at:
+                        st.caption(f"📅 {verbatim.created_at.strftime('%Y-%m-%d')}")
+                with col2:
+                    if verbatim.is_duplicate:
+                        st.caption("⚠️ Doublon détecté")
+    else:
+        st.info("Aucun verbatim trouvé pour ce filtre")
+
+except Exception as e:
+    st.error(f"Erreur lors du chargement des verbatims: {str(e)}")
+    import traceback
+    with st.expander("Détails de l'erreur"):
+        st.code(traceback.format_exc())
 
 # Ontologies des thèmes
 st.divider()
