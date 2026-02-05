@@ -211,7 +211,8 @@ try:
                 'id': v.id,
                 'full_text': v.full_text,
                 'created_at': v.created_at,
-                'dedup_flag': v.dedup_flag or False
+                'dedup_flag': v.dedup_flag or False,
+                'extra_data': v.extra_data or {}
             })
 
         # Charger les ontologies pour le highlighting
@@ -295,6 +296,22 @@ try:
                 with col2:
                     if verbatim['dedup_flag']:
                         st.caption("⚠️ Doublon détecté")
+
+                # Afficher les métadonnées supplémentaires (Marque, Produit, Sous Catégorie)
+                extra = verbatim.get('extra_data', {})
+                if extra:
+                    metadata_items = []
+                    if 'brand' in extra:
+                        metadata_items.append(f"🏷️ **Marque:** {extra['brand']}")
+                    if 'product' in extra:
+                        metadata_items.append(f"📦 **Produit:** {extra['product']}")
+                    if 'subcategory' in extra:
+                        metadata_items.append(f"📂 **Sous Catégorie:** {extra['subcategory']}")
+
+                    if metadata_items:
+                        st.markdown("---")
+                        for item in metadata_items:
+                            st.caption(item)
     else:
         st.info("Aucun verbatim trouvé pour ce filtre")
 

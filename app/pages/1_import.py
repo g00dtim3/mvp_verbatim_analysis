@@ -152,6 +152,9 @@ if st.session_state.uploaded_df is not None:
         ("language", "Langue", False),
         ("page_type", "Type de page", False),
         ("category", "Catégorie", False),
+        ("subcategory", "Sous Catégorie", False),
+        ("brand", "Marque", False),
+        ("product", "Produit", False),
         ("author", "Auteur", False),
         ("url", "URL", False),
         ("source_id", "ID source", False),
@@ -257,6 +260,26 @@ if st.session_state.uploaded_df is not None:
                             # Insérer les verbatims
                             verbatims = []
                             for idx, row in df_mapped.iterrows():
+                                # Préparer extra_data avec les champs supplémentaires
+                                extra_data = {}
+
+                                # Ajouter les nouveaux champs mappables dans extra_data
+                                if pd.notna(row.get('brand')):
+                                    extra_data['brand'] = str(row.get('brand'))
+                                if pd.notna(row.get('product')):
+                                    extra_data['product'] = str(row.get('product'))
+                                if pd.notna(row.get('subcategory')):
+                                    extra_data['subcategory'] = str(row.get('subcategory'))
+
+                                # Ajouter tous les autres champs non mappés
+                                for k, v in row.items():
+                                    if k not in [
+                                        'full_text', 'source_id', 'source_date', 'sentiment',
+                                        'language', 'page_type', 'category', 'author', 'url',
+                                        'brand', 'product', 'subcategory'
+                                    ] and pd.notna(v):
+                                        extra_data[k] = str(v)
+
                                 verbatim = ProjectVerbatim(
                                     project_id=project.id,
                                     full_text=str(row.get('full_text', '')),
@@ -268,13 +291,7 @@ if st.session_state.uploaded_df is not None:
                                     category=str(row.get('category', '')) if pd.notna(row.get('category')) else None,
                                     author=str(row.get('author', '')) if pd.notna(row.get('author')) else None,
                                     url=str(row.get('url', '')) if pd.notna(row.get('url')) else None,
-                                    extra_data={
-                                        k: str(v) for k, v in row.items()
-                                        if k not in [
-                                            'full_text', 'source_id', 'source_date', 'sentiment',
-                                            'language', 'page_type', 'category', 'author', 'url'
-                                        ] and pd.notna(v)
-                                    }
+                                    extra_data=extra_data
                                 )
                                 verbatims.append(verbatim)
 
