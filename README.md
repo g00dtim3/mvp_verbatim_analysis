@@ -2,6 +2,17 @@
 
 Outil d'analyse quali/quanti de verbatims issus de Brandwatch et Semantiweb.
 
+**Version actuelle: 1.2.0** | [Voir le CHANGELOG](CHANGELOG.md)
+
+## 🆕 Nouveautés v1.2.0 (2026-01-29)
+
+- **Explorateur de verbatims** avec highlighting des keywords par thème
+- **Affichage des sentiments en pourcentages** (ex: "60% Pain / 40% Bénéfice")
+- **Intégration données réelles** sur toutes les pages (Nettoyage, Quantification, Exploration)
+- **Correction encodage UTF-8** pour les caractères français accentués
+- **Documentation métriques** de quantification (Volume verbatims vs Volume mentions)
+- **Corrections critiques** DetachedInstanceError, noms de colonnes, double encodage
+
 ## 🏗️ Stack Technique
 
 | Composant | Technologie |
@@ -41,6 +52,7 @@ mvp_verbatim_analysis/
 │   │   └── langgraph_pipeline.py
 │   └── utils/                 # Utilitaires
 │       ├── config.py
+│       ├── encoding.py        # 🆕 Correction encodage UTF-8
 │       └── helpers.py
 ├── app/                       # Streamlit
 │   ├── app.py                 # Point d'entrée
@@ -53,6 +65,8 @@ mvp_verbatim_analysis/
 ├── data/
 │   ├── uploads/               # Fichiers uploadés
 │   └── gida/                  # Référentiel GIDA
+├── docs/                      # Documentation
+│   └── METRIQUES_QUANTIFICATION.md  # 🆕 Guide métriques
 ├── scripts/
 │   ├── init_db.py             # Initialisation DB
 │   └── migrate.py             # Migrations
@@ -60,6 +74,7 @@ mvp_verbatim_analysis/
 ├── .env.example
 ├── requirements.txt
 ├── docker-compose.yml
+├── CHANGELOG.md               # 🆕 Historique des versions
 └── README.md
 ```
 
@@ -151,11 +166,12 @@ CHUNK_SIZE=200
 ## 📊 Workflow
 
 1. **Import** → Upload CSV Brandwatch/Semantiweb
-2. **Nettoyage** → Options configurables + déduplication
+2. **Nettoyage** → Options configurables + déduplication fuzzy (données réelles)
 3. **Analyse LLM** → Mode Rapide (750) ou Complet (chunking)
 4. **Fusion** → 2 passes (algorithmique + LLM)
-5. **Quantification** → Comptage Python déterministe
-6. **Export** → Excel, CSV, Markdown
+5. **Quantification** → Comptage Python déterministe (résultats réels)
+6. **Exploration** → 🆕 Filtrage par thème + highlighting keywords + sentiments en %
+7. **Export** → Excel, CSV, Markdown
 
 ## 🧪 Tests
 

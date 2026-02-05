@@ -4,9 +4,11 @@
 
 Ce document décrit l'implémentation complète du MVP Analyse Verbatims selon les spécifications fonctionnelles v1.2.
 
-**Statut:** ✅ Implémentation complète
+**Statut:** ✅ Implémentation complète et améliorée
 
-**Date:** 2026-01-16
+**Version:** 1.2.0
+
+**Dernière mise à jour:** 2026-01-29
 
 ## 🏗️ Architecture Implémentée
 
@@ -19,6 +21,41 @@ Ce document décrit l'implémentation complète du MVP Analyse Verbatims selon l
 - **Hosting:** Streamlit Cloud / Posit Connect
 - **Driver PostgreSQL:** psycopg3 (psycopg[binary] 3.3.2)
 
+## 🆕 Améliorations v1.2.0 (2026-01-29)
+
+Cette version apporte des améliorations critiques et nouvelles fonctionnalités:
+
+### Nouvelles Fonctionnalités
+- ✅ **Explorateur de verbatims** dans la page Exploration
+  - Filtrage par thème avec dropdown
+  - Highlighting des keywords en gras dans les verbatims
+  - Affichage jusqu'à 50 verbatims par thème
+  - Métadonnées (date, flag de doublon)
+- ✅ **Documentation métriques** (`docs/METRIQUES_QUANTIFICATION.md`)
+  - Explication Volume (verbatims) vs Volume (mentions)
+  - Exemples réels et guide d'interprétation
+  - FAQ et cas d'usage
+
+### Améliorations UX
+- ✅ **Sentiments en pourcentages** au lieu d'emojis
+  - Avant: "😢 Pain", "😊 Bénéfice", "😢😊 Mixte"
+  - Après: "60% Pain / 40% Bénéfice", "100% Pain / 0% Bénéfice"
+- ✅ **Données réelles** sur toutes les pages
+  - Page Nettoyage: aperçu et déduplication sur vraies données du projet
+  - Page Quantification: affichage des résultats d'analyse effectifs
+
+### Corrections Critiques
+- ✅ **DetachedInstanceError** corrigé sur toutes les pages
+  - Conversion systématique des objets ORM en dictionnaires
+  - Meilleure gestion des sessions SQLAlchemy
+- ✅ **Encodage UTF-8** corrigé avec nouveau module `src/utils/encoding.py`
+  - Fonction `fix_double_encoding()` pour Latin-1/UTF-8
+  - Correction "efficacité" → "efficacitÃ©", "résultats" → "rÃ©sultats"
+- ✅ **Noms de colonnes** corrigés dans tout le code
+  - `is_duplicate` → `dedup_flag`
+  - `cleaned_text` → `full_text_clean`
+- ✅ **Métriques de quantification** extraction correcte depuis structure imbriquée
+
 ### Structure du Projet
 
 ```
@@ -27,10 +64,10 @@ mvp_verbatim_analysis/
 │   ├── app.py                    # Page d'accueil
 │   └── pages/
 │       ├── 1_import.py          # Import & mapping CSV
-│       ├── 2_cleaning.py        # Nettoyage & déduplication
+│       ├── 2_cleaning.py        # Nettoyage & déduplication (✨ données réelles)
 │       ├── 3_analysis.py        # Analyse LLM
-│       ├── 4_quantification.py  # Quantification & ontologie
-│       └── 5_exploration.py     # Exploration & export
+│       ├── 4_quantification.py  # Quantification & ontologie (✨ données réelles)
+│       └── 5_exploration.py     # Exploration & export (✨ verbatim explorer)
 ├── src/
 │   ├── api/                      # Logique métier (COMPLÈTE)
 │   │   ├── import_csv.py        # Import & détection source
@@ -50,7 +87,10 @@ mvp_verbatim_analysis/
 │   │   ├── prompts.py           # Prompts LLM
 │   │   └── langgraph_pipeline.py # Pipeline orchestration
 │   └── utils/
-│       └── config.py            # Configuration centralisée
+│       ├── config.py            # Configuration centralisée
+│       └── encoding.py          # 🆕 Utilitaires encodage UTF-8
+├── docs/                         # 🆕 Documentation
+│   └── METRIQUES_QUANTIFICATION.md  # Guide métriques quantification
 ├── scripts/
 │   ├── init_db.py               # Initialisation DB
 │   └── load_gida.py             # Chargement données GIDA
@@ -59,7 +99,8 @@ mvp_verbatim_analysis/
 │       └── gida_2026_01.json    # Référentiel GIDA
 ├── .env                          # Configuration environnement
 ├── requirements.txt              # Dépendances Python
-└── docker-compose.yml            # PostgreSQL
+├── docker-compose.yml            # PostgreSQL
+└── CHANGELOG.md                  # 🆕 Historique des versions
 
 ```
 
@@ -150,13 +191,18 @@ mvp_verbatim_analysis/
   - Filtres par entité GIDA
   - Recherche full-text
   - Pagination performante
+- ✅ **Explorateur de verbatims:** 🆕 v1.2.0
+  - Dropdown de sélection par thème
+  - Affichage jusqu'à 50 verbatims matchés
+  - Highlighting automatique des keywords (gras)
+  - Métadonnées: date, flag doublon
 - ✅ **Export:**
   - Excel multi-feuilles (Verbatims, Synthèse, Keywords)
   - CSV
   - Markdown pour PowerPoint
 - ✅ **Synthèse:**
   - Top thèmes par volume
-  - Pain points / Bénéfices
+  - Pain points / Bénéfices (🆕 affichage en pourcentages)
   - Statistiques globales
 
 ## 🔧 Workflow LangGraph
@@ -373,12 +419,21 @@ pytest tests/ -v
 
 ## 🔍 Points d'Attention
 
+### Améliorations v1.2.0
+
+1. **Gestion sessions SQLAlchemy**: Tous les objets ORM sont convertis en dictionnaires avant fermeture de session (évite DetachedInstanceError)
+2. **Encodage robuste**: Module `encoding.py` pour gérer les problèmes de double encodage UTF-8/Latin-1
+3. **Données réelles partout**: Toutes les pages (Nettoyage, Quantification, Exploration) utilisent les données effectives du projet
+4. **Verbatim explorer**: Navigation intuitive avec highlighting des keywords par thème
+5. **Métriques claires**: Documentation complète dans `docs/METRIQUES_QUANTIFICATION.md`
+
 ### Limitations MVP
 
 1. **Analyse mono-langue**: Le MVP traite une seule langue par run
 2. **Ontologie GIDA statique**: Pas de modification dans l'app (gouvernance GIDA)
 3. **Renommage thèmes**: Pas disponible en MVP (prévu MVP+)
 4. **Scalabilité**: O(n²) pour déduplication (OK jusqu'à ~10k verbatims)
+5. **Affichage verbatims**: Limité à 50 par thème pour performance (v1.2.0)
 
 ### Optimisations Futures (MVP+)
 
@@ -473,20 +528,26 @@ Toutes les dépendances ont été mises à jour pour Python 3.13:
 
 ## ✨ Résumé
 
-**Statut final: ✅ MVP COMPLET ET OPÉRATIONNEL**
+**Statut final: ✅ MVP COMPLET, OPÉRATIONNEL ET AMÉLIORÉ (v1.2.0)**
 
-Toutes les user stories et EPICs des spécifications v1.2 ont été implémentées:
+Toutes les user stories et EPICs des spécifications v1.2 ont été implémentées et améliorées:
 - ✅ 7 EPICs couverts à 100%
 - ✅ 14 User Stories principales réalisées
 - ✅ Architecture complète et testable
 - ✅ Pipeline LangGraph orchestré
-- ✅ UI Streamlit 5 pages fonctionnelles
+- ✅ UI Streamlit 5 pages fonctionnelles avec données réelles
 - ✅ Export multi-formats (Excel, CSV, Markdown)
 - ✅ Base de données complète (12 tables)
 - ✅ Scripts d'initialisation et maintenance
+- ✅ **NOUVEAU v1.2.0:**
+  - Explorateur de verbatims avec highlighting
+  - Sentiments en pourcentages
+  - Corrections encodage UTF-8
+  - Documentation métriques quantification
+  - Toutes les pages utilisent données réelles
 
-**Prêt pour déploiement sur Posit Connect** 🚀
+**Prêt pour déploiement sur Posit Connect / Streamlit Cloud** 🚀
 
 ---
 
-*Document généré le 2026-01-16 | Version 1.0*
+*Document créé le 2026-01-16 | Dernière mise à jour: 2026-01-29 | Version 1.2.0*
