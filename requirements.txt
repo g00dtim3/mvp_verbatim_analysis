@@ -1,45 +1,45 @@
 # Core
 python-dotenv==1.0.0
-pydantic==2.5.0
-pydantic-settings==2.1.0
+pydantic==2.10.3  # Python 3.13 compatible (has prebuilt wheels)
+pydantic-settings==2.7.0  # Updated to match pydantic 2.10.x
 
 # Database
-psycopg2-binary==2.9.9
-sqlalchemy==2.0.23
-alembic==1.13.0
+psycopg[binary]==3.3.2  # PostgreSQL adapter (Python 3.13 compatible)
+sqlalchemy==2.0.36  # Python 3.13 compatible
+alembic==1.14.0  # Updated for Python 3.13
 
 # Data Processing
-pandas==2.1.4
-numpy==1.26.2
+pandas==2.2.3  # Python 3.13 compatible
+numpy==1.26.4  # Python 3.13 compatible
 openpyxl==3.1.2  # Excel export
 
 # Text Processing & NLP
 rapidfuzz==3.5.2  # Fuzzy matching / deduplication
-scikit-learn==1.3.2  # TF-IDF pour mots pivots
+scikit-learn==1.5.2  # TF-IDF pour mots pivots - Python 3.13 compatible
 regex==2023.10.3
 emoji==2.9.0  # Suppression emojis
 unidecode==1.3.7  # Normalisation texte
 
 # LLM & Orchestration
-openai==1.6.0
-langchain==0.0.352
-langgraph==0.0.20
-tiktoken==0.5.2  # Token counting
+openai==1.58.1  # Updated for Python 3.13 compatibility
+langchain==0.3.14  # Updated for Python 3.13
+langgraph==0.2.59  # Updated for Python 3.13
+tiktoken==0.8.0  # Python 3.13 compatible (has prebuilt wheels)
 
 # Frontend
-streamlit==1.29.0
+streamlit==1.40.0  # Python 3.13 compatible
 streamlit-aggrid==0.3.4.post3  # Tables interactives
 plotly==5.18.0  # Visualisations
 
 # Jupyter
-jupyter==1.0.0
-ipykernel==6.27.1
-ipywidgets==8.1.1
+jupyter==1.1.1  # Python 3.13 compatible
+ipykernel==6.29.5  # Updated
+ipywidgets==8.1.5  # Updated
 
 # Testing
-pytest==7.4.3
-pytest-cov==4.1.0
-pytest-asyncio==0.23.2
+pytest==8.3.4  # Python 3.13 compatible
+pytest-cov==6.0.0  # Updated
+pytest-asyncio==0.24.0  # Updated
 
 # Utilities
 tqdm==4.66.1  # Progress bars

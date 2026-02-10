@@ -55,3 +55,9 @@ volumes:
 #
 # Supprimer les données:
 #   docker-compose down -v
+#
+# Alternative: Supabase
+# ---------------------
+# Au lieu de PostgreSQL local, vous pouvez utiliser Supabase (PostgreSQL managé)
+# Voir SUPABASE_SETUP.md pour les instructions complètes
+# Configurez simplement USE_SUPABASE=true dans .env

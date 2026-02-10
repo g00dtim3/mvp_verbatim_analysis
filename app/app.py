@@ -12,8 +12,10 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from src.utils.config import settings
-from src.db.connection import test_connection as test_db, get_db_info
+from src.db.connection import test_connection as test_db, get_db_info, get_db
 from src.llm.client import test_connection as test_llm
+from src.db.models import Project, ProjectVerbatim
+from sqlalchemy import func, desc
 
 # Configuration de la page
 st.set_page_config(
@@ -129,12 +131,47 @@ def main():
             st.switch_page("pages/5_exploration.py")
     
     st.divider()
-    
+
     # Projets récents
     st.header("📂 Projets récents")
-    
-    # TODO: Charger depuis la DB
-    st.info("Aucun projet récent. Commencez par importer un dataset.")
+
+    try:
+        with get_db() as db:
+            # Charger les 5 projets les plus récents avec le nombre de verbatims
+            projects = db.query(
+                Project.id,
+                Project.name,
+                Project.source_type,
+                Project.created_at,
+                func.count(ProjectVerbatim.id).label('verbatim_count')
+            ).outerjoin(
+                ProjectVerbatim, Project.id == ProjectVerbatim.project_id
+            ).group_by(
+                Project.id
+            ).order_by(
+                desc(Project.created_at)
+            ).limit(5).all()
+
+            if projects:
+                for proj in projects:
+                    with st.expander(f"**{proj.name}** ({proj.verbatim_count:,} verbatims)", expanded=False):
+                        col1, col2, col3 = st.columns([2, 2, 1])
+
+                        with col1:
+                            st.caption(f"**Source:** {proj.source_type}")
+                        with col2:
+                            st.caption(f"**Créé le:** {proj.created_at.strftime('%Y-%m-%d %H:%M')}")
+                        with col3:
+                            if st.button("🧹 Nettoyer", key=f"clean_{proj.id}", use_container_width=True):
+                                # Stocker le projet dans la session
+                                st.session_state.current_project_id = str(proj.id)
+                                st.session_state.current_project_name = proj.name
+                                st.switch_page("pages/2_cleaning.py")
+            else:
+                st.info("Aucun projet récent. Commencez par importer un dataset.")
+    except Exception as e:
+        st.error(f"Erreur lors du chargement des projets: {str(e)}")
+        st.info("Commencez par importer un dataset.")
     
     # Workflow
     st.header("📋 Workflow d'analyse")

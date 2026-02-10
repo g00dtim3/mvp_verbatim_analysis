@@ -2,15 +2,26 @@
 
 Outil d'analyse quali/quanti de verbatims issus de Brandwatch et Semantiweb.
 
+**Version actuelle: 1.2.0** | [Voir le CHANGELOG](CHANGELOG.md)
+
+## 🆕 Nouveautés v1.2.0 (2026-01-29)
+
+- **Explorateur de verbatims** avec highlighting des keywords par thème
+- **Affichage des sentiments en pourcentages** (ex: "60% Pain / 40% Bénéfice")
+- **Intégration données réelles** sur toutes les pages (Nettoyage, Quantification, Exploration)
+- **Correction encodage UTF-8** pour les caractères français accentués
+- **Documentation métriques** de quantification (Volume verbatims vs Volume mentions)
+- **Corrections critiques** DetachedInstanceError, noms de colonnes, double encodage
+
 ## 🏗️ Stack Technique
 
 | Composant | Technologie |
 |-----------|-------------|
-| Backend | Python 3.11+ |
+| Backend | Python 3.13 |
 | Notebooks | Jupyter |
-| Base de données | PostgreSQL 15+ |
+| Base de données | PostgreSQL 15+ / Supabase |
 | Frontend | Streamlit |
-| Hosting | Posit Connect |
+| Hosting | Streamlit Cloud / Posit Connect |
 | LLM | OpenAI GPT-4 |
 | Orchestration | LangGraph |
 
@@ -41,6 +52,7 @@ mvp_verbatim_analysis/
 │   │   └── langgraph_pipeline.py
 │   └── utils/                 # Utilitaires
 │       ├── config.py
+│       ├── encoding.py        # 🆕 Correction encodage UTF-8
 │       └── helpers.py
 ├── app/                       # Streamlit
 │   ├── app.py                 # Point d'entrée
@@ -53,6 +65,8 @@ mvp_verbatim_analysis/
 ├── data/
 │   ├── uploads/               # Fichiers uploadés
 │   └── gida/                  # Référentiel GIDA
+├── docs/                      # Documentation
+│   └── METRIQUES_QUANTIFICATION.md  # 🆕 Guide métriques
 ├── scripts/
 │   ├── init_db.py             # Initialisation DB
 │   └── migrate.py             # Migrations
@@ -60,6 +74,7 @@ mvp_verbatim_analysis/
 ├── .env.example
 ├── requirements.txt
 ├── docker-compose.yml
+├── CHANGELOG.md               # 🆕 Historique des versions
 └── README.md
 ```
 
@@ -67,8 +82,8 @@ mvp_verbatim_analysis/
 
 ### Prérequis
 
-- Python 3.11+
-- PostgreSQL 15+
+- Python 3.13
+- PostgreSQL 15+ (ou compte Supabase gratuit)
 - Compte OpenAI avec accès API
 
 ### 1. Cloner et configurer
@@ -98,13 +113,26 @@ nano .env
 
 ### 3. Base de données
 
-```bash
-# Option A : Docker (recommandé pour dev)
-docker-compose up -d db
+Trois options disponibles :
 
-# Option B : PostgreSQL local
+```bash
+# Option A : Docker PostgreSQL (recommandé pour dev local)
+docker-compose up -d db
+python scripts/init_db.py init
+python scripts/load_gida.py load
+
+# Option B : Supabase (recommandé pour production)
+# 1. Créer un projet sur https://supabase.com
+# 2. Configurer USE_SUPABASE=true dans .env
+# 3. Ajouter vos credentials Supabase
+# Voir SUPABASE_SETUP.md pour le guide complet
+python scripts/init_db.py init
+python scripts/load_gida.py load
+
+# Option C : PostgreSQL local
 # Créer la base manuellement puis :
-python scripts/init_db.py
+python scripts/init_db.py init
+python scripts/load_gida.py load
 ```
 
 ### 4. Lancer l'application
@@ -138,11 +166,12 @@ CHUNK_SIZE=200
 ## 📊 Workflow
 
 1. **Import** → Upload CSV Brandwatch/Semantiweb
-2. **Nettoyage** → Options configurables + déduplication
+2. **Nettoyage** → Options configurables + déduplication fuzzy (données réelles)
 3. **Analyse LLM** → Mode Rapide (750) ou Complet (chunking)
 4. **Fusion** → 2 passes (algorithmique + LLM)
-5. **Quantification** → Comptage Python déterministe
-6. **Export** → Excel, CSV, Markdown
+5. **Quantification** → Comptage Python déterministe (résultats réels)
+6. **Exploration** → 🆕 Filtrage par thème + highlighting keywords + sentiments en %
+7. **Export** → Excel, CSV, Markdown
 
 ## 🧪 Tests
 
@@ -158,12 +187,36 @@ pytest tests/ -v
 | `02_data_exploration.ipynb` | Exploration datasets test |
 | `03_prompt_tuning.ipynb` | Optimisation prompts LLM |
 
-## 🚢 Déploiement Posit
+## 🚢 Déploiement
+
+### Streamlit Cloud (Recommandé)
+
+1. Connecter le repo GitHub à Streamlit Cloud
+2. Configurer les secrets dans l'interface (Settings > Secrets):
+   ```toml
+   OPENAI_API_KEY = "sk-..."
+   SUPABASE_URL = "https://xxx.supabase.co"
+   SUPABASE_KEY = "eyJ..."
+   SUPABASE_DB_URL = "postgresql+psycopg://..."
+   USE_SUPABASE = "true"
+   ```
+3. Déployer automatiquement depuis la branche principale
+
+### Posit Connect
 
 ```bash
 # Publier sur Posit Connect
 rsconnect deploy streamlit app/ --name verbatim-analysis
 ```
+
+### Notes Python 3.13
+
+Le projet est entièrement compatible Python 3.13 avec:
+- ✅ SQLAlchemy 2.0.36+ (support Python 3.13)
+- ✅ psycopg3 (psycopg[binary] 3.3.2)
+- ✅ pandas 2.2.3+ (wheels precompilés)
+- ✅ pydantic 2.10.3+ (wheels precompilés)
+- ✅ tiktoken 0.8.0+ (wheels precompilés)
 
 ## 📄 License
 
