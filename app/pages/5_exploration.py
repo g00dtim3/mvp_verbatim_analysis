@@ -185,37 +185,35 @@ with col4:
 st.divider()
 st.header("🔎 Explorer les verbatims")
 
-# Filtre par thème
-topic_options = ["Tous les verbatims"] + [t['canonical_label'] for t in topics]
-selected_topic_filter = st.selectbox(
-    "Filtrer par thème",
-    options=topic_options,
-    help="Sélectionnez un thème pour voir uniquement les verbatims correspondants"
-)
-
 try:
-    with get_db() as db:
-        # Charger les verbatims du projet
-        from src.db.models import ProjectVerbatim
+    import re as _re
+    from src.api.quantification import match_keywords_in_text
 
+    with get_db() as db:
+        # Charger les verbatims avec tous les champs nécessaires
         verbatims_raw = db.query(ProjectVerbatim).join(
             AnalysisRun, ProjectVerbatim.project_id == AnalysisRun.project_id
         ).filter(
             AnalysisRun.id == uuid.UUID(selected_run_id)
         ).all()
 
-        # Convertir en dictionnaires pour éviter DetachedInstanceError
         verbatims_list = []
         for v in verbatims_raw:
+            extra = v.extra_data or {}
             verbatims_list.append({
                 'id': v.id,
                 'full_text': v.full_text,
                 'created_at': v.created_at,
                 'dedup_flag': v.dedup_flag or False,
-                'extra_data': v.extra_data or {}
+                'sentiment': v.sentiment or '',
+                'category': v.category or '',
+                'extra_data': extra,
+                'brand': extra.get('brand', ''),
+                'product': extra.get('product', ''),
+                'subcategory': extra.get('subcategory', ''),
             })
 
-        # Charger les ontologies pour le highlighting
+        # Charger les ontologies pour le keyword matching et highlighting
         ontologies_map = {}
         ontologies_raw = db.query(
             ProjectOntology,
@@ -231,89 +229,156 @@ try:
             ontologies_map[topic_label] = {
                 'keywords': onto.keywords or [],
                 'negative_keywords': onto.negative_keywords or [],
-                'regex_patterns': onto.regex_patterns or []
             }
 
-    # Fonction pour highlighter les keywords
+    # --- Panneau de filtres ---
+    with st.expander("🔧 Filtres", expanded=True):
+        col1, col2, col3 = st.columns(3)
+
+        # Thème
+        topic_options = ["Tous"] + [t['canonical_label'] for t in topics]
+        with col1:
+            selected_theme = st.selectbox("Thème identifié", topic_options, key="filter_theme")
+
+        # Sentiment source
+        sentiments = sorted(set(v['sentiment'] for v in verbatims_list if v['sentiment']))
+        with col2:
+            if sentiments:
+                selected_sentiment = st.selectbox("Sentiment", ["Tous"] + sentiments, key="filter_sentiment")
+            else:
+                selected_sentiment = "Tous"
+                st.selectbox("Sentiment", ["Tous"], key="filter_sentiment", disabled=True,
+                             help="Aucune donnée de sentiment dans ce dataset")
+
+        # Marque
+        brands = sorted(set(v['brand'] for v in verbatims_list if v['brand']))
+        with col3:
+            if brands:
+                selected_brand = st.selectbox("Marque", ["Toutes"] + brands, key="filter_brand")
+            else:
+                selected_brand = "Toutes"
+                st.selectbox("Marque", ["Toutes"], key="filter_brand", disabled=True,
+                             help="Champ Marque non mappé lors de l'import")
+
+        col4, col5, col6 = st.columns(3)
+
+        # Produit
+        products = sorted(set(v['product'] for v in verbatims_list if v['product']))
+        with col4:
+            if products:
+                selected_product = st.selectbox("Produit", ["Tous"] + products, key="filter_product")
+            else:
+                selected_product = "Tous"
+                st.selectbox("Produit", ["Tous"], key="filter_product", disabled=True,
+                             help="Champ Produit non mappé lors de l'import")
+
+        # Catégorie
+        categories = sorted(set(v['category'] for v in verbatims_list if v['category']))
+        with col5:
+            if categories:
+                selected_category = st.selectbox("Catégorie", ["Toutes"] + categories, key="filter_category")
+            else:
+                selected_category = "Toutes"
+                st.selectbox("Catégorie", ["Toutes"], key="filter_category", disabled=True,
+                             help="Champ Catégorie non mappé lors de l'import")
+
+        # Sous Catégorie
+        subcategories = sorted(set(v['subcategory'] for v in verbatims_list if v['subcategory']))
+        with col6:
+            if subcategories:
+                selected_subcategory = st.selectbox("Sous Catégorie", ["Toutes"] + subcategories, key="filter_subcategory")
+            else:
+                selected_subcategory = "Toutes"
+                st.selectbox("Sous Catégorie", ["Toutes"], key="filter_subcategory", disabled=True,
+                             help="Champ Sous Catégorie non mappé lors de l'import")
+
+    # --- Application des filtres ---
     def highlight_keywords(text, keywords):
-        """Met en surbrillance les keywords dans le texte."""
         if not text:
             return ""
-
         highlighted = text
         for kw in keywords:
-            # Simple replacement case-insensitive
-            import re
-            pattern = re.compile(re.escape(kw), re.IGNORECASE)
+            pattern = _re.compile(_re.escape(kw), _re.IGNORECASE)
             highlighted = pattern.sub(lambda m: f"**{m.group()}**", highlighted)
-
         return highlighted
 
-    # Filtrer et afficher
-    if selected_topic_filter == "Tous les verbatims":
-        verbatims_to_show = verbatims_list[:50]  # Limit pour performance
-        st.caption(f"Affichage des 50 premiers verbatims sur {len(verbatims_list)} au total")
-        keywords_to_highlight = []
-    else:
-        # Filtrer par thème en utilisant quantification
-        from src.api.quantification import match_keywords_in_text
+    filtered = verbatims_list
+    keywords_to_highlight = []
 
-        ontology = ontologies_map.get(selected_topic_filter, {})
-        keywords = ontology.get('keywords', [])
-        negative_keywords = ontology.get('negative_keywords', [])
+    # Filtre thème (keyword matching)
+    if selected_theme != "Tous":
+        ontology = ontologies_map.get(selected_theme, {})
+        kws = ontology.get('keywords', [])
+        neg_kws = ontology.get('negative_keywords', [])
+        filtered = [
+            v for v in filtered
+            if match_keywords_in_text(text=v['full_text'], keywords=kws, negative_keywords=neg_kws)
+        ]
+        keywords_to_highlight = kws
 
-        matched_verbatims = []
-        for v in verbatims_list:
-            matched = match_keywords_in_text(
-                text=v['full_text'],
-                keywords=keywords,
-                negative_keywords=negative_keywords
-            )
-            if matched:
-                matched_verbatims.append(v)
+    # Filtre sentiment
+    if selected_sentiment != "Tous":
+        filtered = [v for v in filtered if v['sentiment'] == selected_sentiment]
 
-        verbatims_to_show = matched_verbatims[:50]
-        keywords_to_highlight = keywords
-        st.caption(f"Affichage de {len(verbatims_to_show)} verbatims matchant '{selected_topic_filter}' (max 50)")
+    # Filtre marque
+    if selected_brand != "Toutes":
+        filtered = [v for v in filtered if v['brand'] == selected_brand]
 
-    # Afficher les verbatims
+    # Filtre produit
+    if selected_product != "Tous":
+        filtered = [v for v in filtered if v['product'] == selected_product]
+
+    # Filtre catégorie
+    if selected_category != "Toutes":
+        filtered = [v for v in filtered if v['category'] == selected_category]
+
+    # Filtre sous catégorie
+    if selected_subcategory != "Toutes":
+        filtered = [v for v in filtered if v['subcategory'] == selected_subcategory]
+
+    # --- Résumé et affichage ---
+    total_filtered = len(filtered)
+    verbatims_to_show = filtered[:50]
+
+    st.caption(f"**{total_filtered}** verbatim(s) correspondent aux filtres — affichage des 50 premiers")
+
     if verbatims_to_show:
         for i, verbatim in enumerate(verbatims_to_show, 1):
             text_to_display = verbatim['full_text']
-
-            # Highlighter les keywords si un thème est sélectionné
             if keywords_to_highlight:
                 text_to_display = highlight_keywords(text_to_display, keywords_to_highlight[:5])
 
-            with st.expander(f"Verbatim #{i}: {text_to_display[:80]}...", expanded=False):
+            preview = verbatim['full_text'][:80].replace('\n', ' ')
+            with st.expander(f"#{i} — {preview}…", expanded=False):
                 st.markdown(text_to_display)
 
-                # Afficher métadonnées si disponibles
-                col1, col2 = st.columns(2)
-                with col1:
+                # Ligne de métadonnées
+                meta_cols = st.columns(4)
+                with meta_cols[0]:
                     if verbatim['created_at']:
                         st.caption(f"📅 {verbatim['created_at'].strftime('%Y-%m-%d')}")
-                with col2:
+                with meta_cols[1]:
+                    if verbatim['sentiment']:
+                        st.caption(f"💬 {verbatim['sentiment']}")
+                with meta_cols[2]:
+                    if verbatim['category']:
+                        st.caption(f"🗂️ {verbatim['category']}")
+                with meta_cols[3]:
                     if verbatim['dedup_flag']:
-                        st.caption("⚠️ Doublon détecté")
+                        st.caption("⚠️ Doublon")
 
-                # Afficher les métadonnées supplémentaires (Marque, Produit, Sous Catégorie)
-                extra = verbatim.get('extra_data', {})
-                if extra:
-                    metadata_items = []
-                    if 'brand' in extra:
-                        metadata_items.append(f"🏷️ **Marque:** {extra['brand']}")
-                    if 'product' in extra:
-                        metadata_items.append(f"📦 **Produit:** {extra['product']}")
-                    if 'subcategory' in extra:
-                        metadata_items.append(f"📂 **Sous Catégorie:** {extra['subcategory']}")
-
-                    if metadata_items:
-                        st.markdown("---")
-                        for item in metadata_items:
-                            st.caption(item)
+                # Champs supplémentaires (brand, product, subcategory)
+                extra_tags = []
+                if verbatim['brand']:
+                    extra_tags.append(f"🏷️ {verbatim['brand']}")
+                if verbatim['product']:
+                    extra_tags.append(f"📦 {verbatim['product']}")
+                if verbatim['subcategory']:
+                    extra_tags.append(f"📂 {verbatim['subcategory']}")
+                if extra_tags:
+                    st.caption("  |  ".join(extra_tags))
     else:
-        st.info("Aucun verbatim trouvé pour ce filtre")
+        st.info("Aucun verbatim ne correspond aux filtres sélectionnés.")
 
 except Exception as e:
     st.error(f"Erreur lors du chargement des verbatims: {str(e)}")
